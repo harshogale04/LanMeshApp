@@ -424,6 +424,57 @@ func StartNode(port int, dataDir string) (*Node, error) {
 		})
 	})
 
+	// /connect accepts a POST with JSON {"addr": "<full multiaddr including /p2p/peerID>"} and
+	// triggers an immediate libp2p dial to the specified peer. This is useful for:
+	//  - Testing two nodes on the same machine (same LAN IP, different HTTP ports — the
+	//    SubnetScanner cannot distinguish them since it scans by IP only).
+	//  - Manual pairing via QR code or copy-paste when mDNS is blocked.
+	mux.HandleFunc("/connect", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST required", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Addr string `json:"addr"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Addr == "" {
+			http.Error(w, "JSON body with 'addr' required", http.StatusBadRequest)
+			return
+		}
+		maddr, err := multiaddr.NewMultiaddr(req.Addr)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid address: " + err.Error()})
+			return
+		}
+		info, err := peer.AddrInfoFromP2pAddr(maddr)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid peer address: " + err.Error()})
+			return
+		}
+		if info.ID == host.ID() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "cannot connect to self"})
+			return
+		}
+		host.Peerstore().ClearAddrs(info.ID)
+		host.Peerstore().AddAddrs(info.ID, info.Addrs, peerstore.TempAddrTTL)
+		dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer dialCancel()
+		if err := host.Connect(dialCtx, *info); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "connected", "peer": info.ID.String()})
+	})
+
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
