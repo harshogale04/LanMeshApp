@@ -574,6 +574,34 @@
       opacity: .8
     }
 
+    .meta .hop-tag {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      cursor: help;
+      opacity: 0.85;
+    }
+    .meta .hop-tag.direct {
+      background: rgba(46, 213, 115, 0.15);
+      color: #2ed573;
+      border: 1px solid rgba(46, 213, 115, 0.3);
+    }
+    .meta .hop-tag.relayed {
+      background: rgba(242, 194, 48, 0.15);
+      color: #f2c230;
+      border: 1px solid rgba(242, 194, 48, 0.3);
+    }
+    .meta .hop-tag.multi {
+      background: rgba(30, 144, 255, 0.15);
+      color: #1e90ff;
+      border: 1px solid rgba(30, 144, 255, 0.3);
+    }
+
     .bubble-wrap {
       display: flex;
       align-items: flex-end;
@@ -2810,9 +2838,23 @@
       const senderLabel = msg.isSelf ? "You" : (msg.nickname || (msg.sender || "peer").substring(0, 8));
       const timeLabel = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
+      let hopBadge = '';
+      if (!msg.isSelf && msg.hops !== undefined) {
+        const trailStr = (msg.hopTrail && msg.hopTrail.length)
+          ? 'Route: ' + msg.hopTrail.map(p => p.slice(0, 6)).join(' → ')
+          : (msg.hops + ' hop' + (msg.hops > 1 ? 's' : ''));
+        if (msg.hops === 1) {
+          hopBadge = `<span class="hop-tag direct" title="${trailStr}">⚡ Direct</span>`;
+        } else if (msg.hops === 2) {
+          hopBadge = `<span class="hop-tag relayed" title="${trailStr}">🔄 1 relay</span>`;
+        } else if (msg.hops > 2) {
+          hopBadge = `<span class="hop-tag multi" title="${trailStr}">🌐 ${msg.hops} hops</span>`;
+        }
+      }
+
       const meta = document.createElement('div');
       meta.className = 'meta';
-      meta.innerHTML = `<span>${senderLabel}</span><span class="tag">#${msg.groupId}</span>${timeLabel ? `<span class="time">${timeLabel}</span>` : ''}${(editedText && !isDeleted) ? `<span class="edited-tag">(edited)</span>` : ''}`;
+      meta.innerHTML = `<span>${senderLabel}</span><span class="tag">#${msg.groupId}</span>${hopBadge}${timeLabel ? `<span class="time">${timeLabel}</span>` : ''}${(editedText && !isDeleted) ? `<span class="edited-tag">(edited)</span>` : ''}`;
 
       const bubbleWrap = document.createElement('div');
       bubbleWrap.className = 'bubble-wrap';
@@ -2952,6 +2994,13 @@
               addr.style.cssText = 'color:#aaa;margin-left:6px;font-size:0.7em;';
               addr.textContent = addrLabel;
               row.appendChild(addr);
+            }
+
+            if (p.latencyMs !== undefined && p.latencyMs > 0) {
+              const latBadge = document.createElement('span');
+              latBadge.style.cssText = 'color:#2ed573;background:rgba(46,213,115,0.15);padding:1px 4px;border-radius:3px;font-size:0.68em;margin-left:6px;';
+              latBadge.textContent = `${p.latencyMs}ms`;
+              row.appendChild(latBadge);
             }
 
             const voiceBtn = document.createElement('button');

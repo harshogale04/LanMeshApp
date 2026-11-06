@@ -16,16 +16,17 @@ import (
 )
 
 type ChatMessage struct {
-	Type      string `json:"type"`
-	Payload   string `json:"payload"`
-	Sender    string `json:"sender"`
-	GroupID   string `json:"groupId"`
-	MessageID string `json:"messageId"`
-	Hops      int    `json:"hops"`
-	Timestamp int64  `json:"timestamp"`
-	Nickname  string `json:"nickname"`
-	FileName  string `json:"fileName,omitempty"`
-	To        string `json:"to,omitempty"`
+	Type      string   `json:"type"`
+	Payload   string   `json:"payload"`
+	Sender    string   `json:"sender"`
+	GroupID   string   `json:"groupId"`
+	MessageID string   `json:"messageId"`
+	Hops      int      `json:"hops"`
+	Timestamp int64    `json:"timestamp"`
+	Nickname  string   `json:"nickname"`
+	FileName  string   `json:"fileName,omitempty"`
+	To        string   `json:"to,omitempty"`
+	HopTrail  []string `json:"hopTrail,omitempty"`
 }
 
 const maxHops = 6
@@ -122,11 +123,19 @@ func markSeen(id string) bool {
 	return defaultSeen.markSeen(id)
 }
 
+var relaySem = make(chan struct{}, 32)
+
 func relayToPeers(ctx context.Context, host libp2phost.Host, exclude peer.ID, msg ChatMessage) {
 	if msg.Hops >= maxHops {
 		return
 	}
 	msg.Hops++
+	// Append current node to the hop trail
+	trailCopy := make([]string, len(msg.HopTrail), len(msg.HopTrail)+1)
+	copy(trailCopy, msg.HopTrail)
+	trailCopy = append(trailCopy, host.ID().String())
+	msg.HopTrail = trailCopy
+
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return
@@ -140,6 +149,15 @@ func relayToPeers(ctx context.Context, host libp2phost.Host, exclude peer.ID, ms
 		go func(target peer.ID) {
 			sctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
+
+			// Concurrency throttling: acquire relay slot or drop if saturated
+			select {
+			case relaySem <- struct{}{}:
+				defer func() { <-relaySem }()
+			case <-sctx.Done():
+				return
+			}
+
 			stream, err := host.NewStream(sctx, target, protocolID)
 			if err != nil {
 				return
@@ -158,7 +176,10 @@ var (
 	db   *bolt.DB
 )
 
-const groupsBucket = "__groups__"
+const (
+	groupsBucket   = "__groups__"
+	msgIndexBucket = "msg_index"
+)
 
 func initStore(path string) error {
 	dbMu.Lock()
@@ -172,14 +193,22 @@ func initStore(path string) error {
 		return err
 	}
 	return db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(groupsBucket))
-		return err
+		if _, err := tx.CreateBucketIfNotExists([]byte(groupsBucket)); err != nil {
+			return err
+		}
+		if _, err := tx.CreateBucketIfNotExists([]byte(msgIndexBucket)); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
 func saveMessage(msg ChatMessage) error {
 	if msg.GroupID == "" {
 		msg.GroupID = "general"
+	}
+	if msg.Timestamp == 0 {
+		msg.Timestamp = time.Now().UnixMilli()
 	}
 	dbMu.RLock()
 	defer dbMu.RUnlock()
@@ -201,18 +230,163 @@ func saveMessage(msg ChatMessage) error {
 		if err != nil {
 			return err
 		}
-		seq, err := bucket.NextSequence()
+		idxBucket, err := tx.CreateBucketIfNotExists([]byte(msgIndexBucket))
 		if err != nil {
 			return err
 		}
-		key := make([]byte, 8)
-		binary.BigEndian.PutUint64(key, seq)
+		// O(1) duplicate suppression via msg_index bucket
+		if msg.MessageID != "" && idxBucket.Get([]byte(msg.MessageID)) != nil {
+			return nil // already exists locally
+		}
+
+		key := MakeTimestampKey(msg.Timestamp, msg.MessageID)
 		data, err := json.Marshal(msg)
 		if err != nil {
 			return err
 		}
-		return bucket.Put(key, data)
+		if err := bucket.Put(key, data); err != nil {
+			return err
+		}
+		if msg.MessageID != "" {
+			return idxBucket.Put([]byte(msg.MessageID), []byte(msg.GroupID))
+		}
+		return nil
 	})
+}
+
+// saveBatch commits up to 50 messages in a single BoltDB transaction (1 disk fsync).
+func saveBatch(messages []ChatMessage) error {
+	if len(messages) == 0 {
+		return nil
+	}
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+	if db == nil {
+		return fmt.Errorf("db not initialized")
+	}
+	return db.Update(func(tx *bolt.Tx) error {
+		groups, err := tx.CreateBucketIfNotExists([]byte(groupsBucket))
+		if err != nil {
+			return err
+		}
+		idxBucket, err := tx.CreateBucketIfNotExists([]byte(msgIndexBucket))
+		if err != nil {
+			return err
+		}
+
+		for _, msg := range messages {
+			if msg.GroupID == "" {
+				msg.GroupID = "general"
+			}
+			if msg.Timestamp == 0 {
+				msg.Timestamp = time.Now().UnixMilli()
+			}
+			_ = groups.Put([]byte(msg.GroupID), []byte("1"))
+			if msg.Type == "group_announce" || msg.Type == "typing" {
+				continue
+			}
+			if msg.MessageID != "" && idxBucket.Get([]byte(msg.MessageID)) != nil {
+				continue // already saved
+			}
+			bucket, err := tx.CreateBucketIfNotExists([]byte(msg.GroupID))
+			if err != nil {
+				return err
+			}
+			key := MakeTimestampKey(msg.Timestamp, msg.MessageID)
+			data, err := json.Marshal(msg)
+			if err != nil {
+				continue
+			}
+			if err := bucket.Put(key, data); err != nil {
+				return err
+			}
+			if msg.MessageID != "" {
+				_ = idxBucket.Put([]byte(msg.MessageID), []byte(msg.GroupID))
+			}
+		}
+		return nil
+	})
+}
+
+// historySince returns messages in groupID with timestamp > sinceMs using O(log N) cursor seek.
+// Returns (messages, hasMore, nextSinceTimestamp).
+func historySince(groupID string, sinceMs int64, limit int) ([]ChatMessage, bool, int64) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var out []ChatMessage
+	var nextSince int64
+	hasMore := false
+
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+	if db == nil {
+		return nil, false, 0
+	}
+
+	db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(groupID))
+		if b == nil {
+			return nil
+		}
+		c := b.Cursor()
+		seekKey := MakeSeekKey(sinceMs + 1) // strictly newer than sinceMs
+		for k, v := c.Seek(seekKey); k != nil; k, v = c.Next() {
+			if len(out) >= limit {
+				hasMore = true
+				break
+			}
+			var msg ChatMessage
+			if err := json.Unmarshal(v, &msg); err == nil {
+				out = append(out, msg)
+				if msg.Timestamp > nextSince {
+					nextSince = msg.Timestamp
+				}
+			}
+		}
+		return nil
+	})
+	return out, hasMore, nextSince
+}
+
+// groupHighWatermark returns the highest timestamp observed in each group in O(1) time via cursor.Last().
+func groupHighWatermark() map[string]int64 {
+	digests := make(map[string]int64)
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+	if db == nil {
+		return digests
+	}
+	db.View(func(tx *bolt.Tx) error {
+		groupsB := tx.Bucket([]byte(groupsBucket))
+		if groupsB == nil {
+			return nil
+		}
+		return groupsB.ForEach(func(k, v []byte) error {
+			groupID := string(k)
+			b := tx.Bucket(k)
+			if b == nil {
+				digests[groupID] = 0
+				return nil
+			}
+			c := b.Cursor()
+			lastK, lastV := c.Last()
+			if lastK == nil {
+				digests[groupID] = 0
+				return nil
+			}
+			if len(lastK) >= 8 {
+				digests[groupID] = int64(binary.BigEndian.Uint64(lastK[:8]))
+			} else {
+				var m ChatMessage
+				if err := json.Unmarshal(lastV, &m); err == nil {
+					digests[groupID] = m.Timestamp
+				}
+			}
+			return nil
+		})
+	})
+	return digests
 }
 
 func knownGroups() []string {
@@ -233,6 +407,15 @@ func knownGroups() []string {
 		})
 	})
 	return groups
+}
+
+func groupKnownLocally(groupID string) bool {
+	for _, g := range knownGroups() {
+		if g == groupID {
+			return true
+		}
+	}
+	return false
 }
 
 func historyFor(groupID string) []ChatMessage {

@@ -3,6 +3,9 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -12,178 +15,242 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-const syncProtocolID = "/p2p-chat-sync/1.0.0"
+const (
+	syncProtocolID     = "/p2p-sync/1.0.0"
+	legacySyncProtocol = "/p2p-chat-sync/1.0.0"
+	syncCooldown       = 45 * time.Second
+	syncStreamTimeout  = 20 * time.Second
+	syncChunkLimit     = 50
+)
 
-// ---------------------------------------------------------------------
-// Admin-mediated reconnection sync.
-//
-// Only an admin node ever INITIATES a sync exchange — "admin takes
-// responsibility to sync." Regular peers never sync with each other and
-// never initiate sync with an admin either; they passively respond when
-// an admin asks. Because only admin initiates, one stream carries both
-// directions:
-//
-//   1. admin  -> peer : admin's manifest (what admin already has)
-//   2. peer   -> admin: messages admin is missing + peer's own manifest
-//   3. admin  -> peer : messages peer is missing (computed AFTER admin's
-//                       own history was updated by step 2)
-// ---------------------------------------------------------------------
+var syncSem = make(chan struct{}, 2) // Semaphore: max 2 concurrent sync streams
 
-type syncGroupManifest struct {
-	GroupID    string   `json:"groupId"`
-	MessageIDs []string `json:"messageIds"`
+// SyncEnvelope wraps typed JSON messages over /p2p-sync/1.0.0 streams.
+type SyncEnvelope struct {
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
 }
 
-type syncManifest struct {
-	Groups []syncGroupManifest `json:"groups"`
+type DigestRequest struct {
+	Digest map[string]int64 `json:"digest"` // groupID -> highestTimestamp
 }
 
-type syncPayload struct {
-	Missing  []ChatMessage       `json:"missing"`
-	Manifest []syncGroupManifest `json:"manifest,omitempty"`
+type GroupDelta struct {
+	GroupID string `json:"groupId"`
+	Since   int64  `json:"since"`
 }
 
-func messageIndexFor(groupID string) map[string]ChatMessage {
-	index := make(map[string]ChatMessage)
-	for _, m := range historyFor(groupID) {
-		if m.MessageID != "" {
-			index[m.MessageID] = m
-		}
-	}
-	return index
+type DigestResponse struct {
+	Groups []GroupDelta `json:"groups"`
 }
 
-func groupKnownLocally(groupID string) bool {
-	for _, g := range knownGroups() {
-		if g == groupID {
-			return true
-		}
-	}
-	return false
+type PullRequest struct {
+	GroupID string `json:"groupId"`
+	Since   int64  `json:"since"`
+	Limit   int    `json:"limit"`
 }
 
-func buildLocalManifest() []syncGroupManifest {
-	var manifest []syncGroupManifest
-	for _, g := range knownGroups() {
-		index := messageIndexFor(g)
-		ids := make([]string, 0, len(index))
-		for id := range index {
-			ids = append(ids, id)
-		}
-		manifest = append(manifest, syncGroupManifest{GroupID: g, MessageIDs: ids})
-	}
-	return manifest
+type PullResponse struct {
+	GroupID   string        `json:"groupId"`
+	Messages  []ChatMessage `json:"messages"`
+	HasMore   bool          `json:"hasMore"`
+	NextSince int64         `json:"nextSince"`
 }
 
-// computeMissing returns every locally-stored message not represented in
-// theirManifest.
-func computeMissing(theirManifest []syncGroupManifest) []ChatMessage {
-	haveByGroup := make(map[string]map[string]bool)
-	for _, g := range theirManifest {
-		set := make(map[string]bool, len(g.MessageIDs))
-		for _, id := range g.MessageIDs {
-			set[id] = true
-		}
-		haveByGroup[g.GroupID] = set
-	}
-
-	var missing []ChatMessage
-	for _, groupID := range knownGroups() {
-		theyHave := haveByGroup[groupID] // nil if they don't know this group at all
-		for _, m := range historyFor(groupID) {
-			if m.MessageID == "" {
-				continue
-			}
-			if theyHave == nil || !theyHave[m.MessageID] {
-				missing = append(missing, m)
-			}
-		}
-	}
-	return missing
-}
-
-// syncServer is the passive side, run on EVERY node. applyFn wires
-// step-3's incoming backfill into save/broadcast/relay, same as a live
-// message.
-func syncServer(s network.Stream, applyFn func(ChatMessage)) {
+// handleSyncStream serves the responder side of /p2p-sync/1.0.0.
+func handleSyncStream(s network.Stream) {
 	defer s.Close()
+	_ = s.SetDeadline(time.Now().Add(syncStreamTimeout))
+
 	dec := json.NewDecoder(s)
 	enc := json.NewEncoder(s)
 
-	// Step 1: read admin's manifest.
-	var reqManifest syncManifest
-	if err := dec.Decode(&reqManifest); err != nil {
+	// Step 1: Read DigestRequest
+	var reqEnv SyncEnvelope
+	if err := dec.Decode(&reqEnv); err != nil {
+		return
+	}
+	if reqEnv.Type != "digest_request" {
 		return
 	}
 
-	// Step 2: reply with what admin is missing (per OUR history) plus
-	// our own manifest, so admin can compute OUR gap in step 3.
-	reply := syncPayload{
-		Missing:  computeMissing(reqManifest.Groups),
-		Manifest: buildLocalManifest(),
-	}
-	if err := enc.Encode(reply); err != nil {
+	var dReq DigestRequest
+	if err := json.Unmarshal(reqEnv.Payload, &dReq); err != nil {
 		return
 	}
 
-	// Step 3: read back what WE are missing, apply it.
-	var final syncPayload
-	if err := dec.Decode(&final); err != nil {
+	// Compute which groups have newer messages than peer's digest
+	localMarks := groupHighWatermark()
+	var deltas []GroupDelta
+
+	// Check groups known locally
+	for _, groupID := range knownGroups() {
+		peerSince, peerHasGroup := dReq.Digest[groupID]
+		localMax := localMarks[groupID]
+
+		if !peerHasGroup {
+			// Peer doesn't know this group: offer all history from 0
+			deltas = append(deltas, GroupDelta{GroupID: groupID, Since: 0})
+		} else if localMax > peerSince {
+			// Local node has messages newer than peer's watermark
+			deltas = append(deltas, GroupDelta{GroupID: groupID, Since: peerSince})
+		}
+	}
+
+	dRespData, _ := json.Marshal(DigestResponse{Groups: deltas})
+	if err := enc.Encode(SyncEnvelope{Type: "digest_response", Payload: dRespData}); err != nil {
 		return
 	}
-	for _, m := range final.Missing {
-		applyFn(m)
+
+	// Step 2: Serve chunked PullRequests
+	for {
+		_ = s.SetDeadline(time.Now().Add(syncStreamTimeout))
+		var pReqEnv SyncEnvelope
+		if err := dec.Decode(&pReqEnv); err != nil {
+			if err == io.EOF {
+				return
+			}
+			return
+		}
+		if pReqEnv.Type != "pull_request" {
+			return
+		}
+
+		var pReq PullRequest
+		if err := json.Unmarshal(pReqEnv.Payload, &pReq); err != nil {
+			return
+		}
+
+		limit := pReq.Limit
+		if limit <= 0 || limit > syncChunkLimit {
+			limit = syncChunkLimit
+		}
+
+		msgs, hasMore, nextSince := historySince(pReq.GroupID, pReq.Since, limit)
+		pRespData, _ := json.Marshal(PullResponse{
+			GroupID:   pReq.GroupID,
+			Messages:  msgs,
+			HasMore:   hasMore,
+			NextSince: nextSince,
+		})
+
+		if err := enc.Encode(SyncEnvelope{Type: "pull_response", Payload: pRespData}); err != nil {
+			return
+		}
 	}
 }
 
-// requestSync is the active side — only ever called when this node is
-// admin (see syncNotifee.Connected below).
-func requestSync(ctx context.Context, host libp2phost.Host, p peer.ID, applyFn func(ChatMessage)) {
-	stream, err := host.NewStream(ctx, p, syncProtocolID)
+// requestSync initiates /p2p-sync/1.0.0 catch-up with target peer using local database watermarks.
+func requestSync(ctx context.Context, host libp2phost.Host, target peer.ID, applyFn func(ChatMessage)) error {
+	return requestSyncWithWatermarks(ctx, host, target, groupHighWatermark(), applyFn)
+}
+
+// requestSyncWithWatermarks initiates /p2p-sync/1.0.0 catch-up with target peer using the provided group watermarks.
+func requestSyncWithWatermarks(ctx context.Context, host libp2phost.Host, target peer.ID, localMarks map[string]int64, applyFn func(ChatMessage)) error {
+	// Acquire sync semaphore (limit 2 concurrent syncs)
+	select {
+	case syncSem <- struct{}{}:
+		defer func() { <-syncSem }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	sctx, cancel := context.WithTimeout(ctx, syncStreamTimeout)
+	defer cancel()
+
+	s, err := host.NewStream(sctx, target, syncProtocolID, legacySyncProtocol)
 	if err != nil {
-		return // peer may not support sync yet, or just dropped — not fatal
+		return fmt.Errorf("failed to open sync stream: %w", err)
 	}
-	defer stream.Close()
+	defer s.Close()
+	_ = s.SetDeadline(time.Now().Add(syncStreamTimeout))
 
-	dec := json.NewDecoder(stream)
-	enc := json.NewEncoder(stream)
+	dec := json.NewDecoder(s)
+	enc := json.NewEncoder(s)
 
-	// Step 1: send our manifest.
-	if err := enc.Encode(syncManifest{Groups: buildLocalManifest()}); err != nil {
-		return
+	// Step 1: Send our watermarks
+	if localMarks == nil {
+		localMarks = make(map[string]int64)
 	}
-
-	// Step 2: read what we're missing (per peer's history) + peer's manifest.
-	var reply syncPayload
-	if err := dec.Decode(&reply); err != nil {
-		return
-	}
-	for _, m := range reply.Missing {
-		applyFn(m)
+	dReqData, _ := json.Marshal(DigestRequest{Digest: localMarks})
+	if err := enc.Encode(SyncEnvelope{Type: "digest_request", Payload: dReqData}); err != nil {
+		return err
 	}
 
-	// Step 3: now that our history includes whatever step 2 just taught
-	// us, compute the peer's gap and push it.
-	final := syncPayload{Missing: computeMissing(reply.Manifest)}
-	if err := enc.Encode(final); err != nil {
-		return
+	// Step 2: Read DigestResponse
+	var dRespEnv SyncEnvelope
+	if err := dec.Decode(&dRespEnv); err != nil {
+		return err
 	}
+	if dRespEnv.Type != "digest_response" {
+		return fmt.Errorf("unexpected envelope: %s", dRespEnv.Type)
+	}
+
+	var dResp DigestResponse
+	if err := json.Unmarshal(dRespEnv.Payload, &dResp); err != nil {
+		return err
+	}
+
+	if len(dResp.Groups) == 0 {
+		return nil // Already completely up to date
+	}
+
+	// Step 3: Pull chunked message deltas
+	for _, delta := range dResp.Groups {
+		since := delta.Since
+		for {
+			_ = s.SetDeadline(time.Now().Add(syncStreamTimeout))
+			pReqData, _ := json.Marshal(PullRequest{
+				GroupID: delta.GroupID,
+				Since:   since,
+				Limit:   syncChunkLimit,
+			})
+			if err := enc.Encode(SyncEnvelope{Type: "pull_request", Payload: pReqData}); err != nil {
+				return err
+			}
+
+			var pRespEnv SyncEnvelope
+			if err := dec.Decode(&pRespEnv); err != nil {
+				return err
+			}
+			if pRespEnv.Type != "pull_response" {
+				return fmt.Errorf("expected pull_response, got %s", pRespEnv.Type)
+			}
+
+			var pResp PullResponse
+			if err := json.Unmarshal(pRespEnv.Payload, &pResp); err != nil {
+				return err
+			}
+
+			if len(pResp.Messages) > 0 {
+				// Single-transaction batch disk commit
+				_ = saveBatch(pResp.Messages)
+				for _, msg := range pResp.Messages {
+					applyFn(msg)
+				}
+			}
+
+			if !pResp.HasMore || len(pResp.Messages) == 0 {
+				break
+			}
+			since = pResp.NextSince
+		}
+	}
+
+	log.Printf("[LANMESH-SYNC] Catch-up sync complete with peer %s", target.String()[:8])
+	return nil
 }
 
 // ---------------------------------------------------------------------
-// Connection-triggered sync. Connected fires on BOTH sides of a new
-// libp2p connection regardless of who dialed — but only the admin side
-// acts on it.
+// Connection-triggered sync notifee.
+// Uses lexicographical peer ID tie-breaking to avoid connection glare.
 // ---------------------------------------------------------------------
-
-const syncCooldown = 30 * time.Second
 
 type syncNotifee struct {
-	ctx     context.Context
-	host    libp2phost.Host
-	applyFn func(ChatMessage)
-	isAdmin func() bool
-
+	ctx      context.Context
+	host     libp2phost.Host
+	applyFn  func(ChatMessage)
+	isAdmin  func() bool
 	mu       sync.Mutex
 	lastSync map[peer.ID]time.Time
 }
@@ -209,15 +276,24 @@ func (n *syncNotifee) shouldSync(p peer.ID) bool {
 }
 
 func (n *syncNotifee) Connected(_ network.Network, c network.Conn) {
-	if !n.isAdmin() {
-		return // "admin takes responsibility to sync" — regular peers never initiate
-	}
 	p := c.RemotePeer()
 	if !n.shouldSync(p) {
 		return
 	}
+
+	// Tie-breaking: the peer with smaller Peer ID initiates sync, or an admin node always initiates.
+	// This ensures exactly 1 sync stream is opened between any pair of nodes.
+	isInitiator := n.isAdmin() || (n.host.ID() < p)
+	if !isInitiator {
+		return
+	}
+
 	go func() {
-		requestSync(n.ctx, n.host, p, n.applyFn)
+		// Small delay to allow stream multiplexer handshake to settle
+		time.Sleep(300 * time.Millisecond)
+		if err := requestSync(n.ctx, n.host, p, n.applyFn); err != nil {
+			log.Printf("[LANMESH-SYNC] Sync attempt with %s completed/skipped: %v", p.String()[:8], err)
+		}
 	}()
 }
 
