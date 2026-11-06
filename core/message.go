@@ -16,16 +16,20 @@ import (
 )
 
 type ChatMessage struct {
-	Type      string `json:"type"`
-	Payload   string `json:"payload"`
-	Sender    string `json:"sender"`
-	GroupID   string `json:"groupId"`
-	MessageID string `json:"messageId"`
-	Hops      int    `json:"hops"`
-	Timestamp int64  `json:"timestamp"`
-	Nickname  string `json:"nickname"`
-	FileName  string `json:"fileName,omitempty"`
-	To        string `json:"to,omitempty"`
+	Type      string   `json:"type"`
+	Payload   string   `json:"payload"`
+	Sender    string   `json:"sender"`
+	GroupID   string   `json:"groupId"`
+	MessageID string   `json:"messageId"`
+	Hops      int      `json:"hops"`
+	Timestamp int64    `json:"timestamp"`
+	Nickname  string   `json:"nickname"`
+	Avatar    string   `json:"avatar,omitempty"`
+	FileName  string   `json:"fileName,omitempty"`
+	FileSize  int64    `json:"fileSize,omitempty"`
+	ReplyTo   string   `json:"replyTo,omitempty"`
+	HopTrail  []string `json:"hopTrail,omitempty"`
+	To        string   `json:"to,omitempty"`
 }
 
 const maxHops = 6
@@ -34,17 +38,20 @@ const protocolID = "/p2p-chat/1.0.0"
 // callProtocolID carries live call signaling only (1:1 and group room calls).
 // It deliberately bypasses markSeen/saveMessage/relayToPeers: signaling
 // is ephemeral and point-to-point between directly connected peers,
-// not persisted chat history and never multi-hop relayed — routing a
-// call's media or signaling through intermediate chat nodes would add latency
-// and break direct WebRTC peer connections.
+// not persisted chat history and never multi-hop relayed.
 const callProtocolID = "/lanmesh-call/1.0.0"
+
+// relaySem is a bounded semaphore (capacity 32) limiting simultaneous
+// outbound forwarding streams across the mesh, protecting CPU and battery
+// during message bursts.
+var relaySem = make(chan struct{}, 32)
 
 func isCallSignal(t string) bool {
 	switch t {
 	case "call-offer", "call-answer", "call-ice", "call-end",
 		"room-call-start", "room-call-join", "room-call-leave", "room-call-presence", "room-call-end",
 		"room-offer", "room-answer", "room-ice",
-		"peer-identity": // Ephemeral display-name exchange — not persisted or relayed over chat mesh
+		"peer-identity": // Ephemeral display-name exchange
 		return true
 	}
 	return false
@@ -126,8 +133,18 @@ func relayToPeers(ctx context.Context, host libp2phost.Host, exclude peer.ID, ms
 	if msg.Hops >= maxHops {
 		return
 	}
-	msg.Hops++
-	data, err := json.Marshal(msg)
+	msgCopy := msg
+	msgCopy.Hops++
+
+	myID := host.ID().String()
+	trail := make([]string, len(msg.HopTrail), len(msg.HopTrail)+1)
+	copy(trail, msg.HopTrail)
+	if len(trail) == 0 || trail[len(trail)-1] != myID {
+		trail = append(trail, myID)
+	}
+	msgCopy.HopTrail = trail
+
+	data, err := json.Marshal(msgCopy)
 	if err != nil {
 		return
 	}
@@ -140,6 +157,14 @@ func relayToPeers(ctx context.Context, host libp2phost.Host, exclude peer.ID, ms
 		go func(target peer.ID) {
 			sctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
+
+			select {
+			case relaySem <- struct{}{}:
+				defer func() { <-relaySem }()
+			case <-sctx.Done():
+				return
+			}
+
 			stream, err := host.NewStream(sctx, target, protocolID)
 			if err != nil {
 				return
@@ -159,6 +184,27 @@ var (
 )
 
 const groupsBucket = "__groups__"
+
+func fnv1a64(s string) uint64 {
+	var h uint64 = 0xcbf29ce484222325
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= 0x100000001b3
+	}
+	return h
+}
+
+// compositeKey returns a 16-byte index key:
+// [8 Bytes: UnixMs Timestamp (BigEndian)] [8 Bytes: FNV-1a Hash of Message ID]
+func compositeKey(ts int64, msgID string) []byte {
+	if ts <= 0 {
+		ts = time.Now().UnixMilli()
+	}
+	k := make([]byte, 16)
+	binary.BigEndian.PutUint64(k[0:8], uint64(ts))
+	binary.BigEndian.PutUint64(k[8:16], fnv1a64(msgID))
+	return k
+}
 
 func initStore(path string) error {
 	dbMu.Lock()
@@ -181,6 +227,9 @@ func saveMessage(msg ChatMessage) error {
 	if msg.GroupID == "" {
 		msg.GroupID = "general"
 	}
+	if msg.Timestamp <= 0 {
+		msg.Timestamp = time.Now().UnixMilli()
+	}
 	dbMu.RLock()
 	defer dbMu.RUnlock()
 	if db == nil {
@@ -194,19 +243,14 @@ func saveMessage(msg ChatMessage) error {
 		if err := groups.Put([]byte(msg.GroupID), []byte("1")); err != nil {
 			return err
 		}
-		if msg.Type == "group_announce" || msg.Type == "typing" {
+		if msg.Type == "group_announce" || msg.Type == "typing" || msg.Type == "ping" {
 			return nil
 		}
 		bucket, err := tx.CreateBucketIfNotExists([]byte(msg.GroupID))
 		if err != nil {
 			return err
 		}
-		seq, err := bucket.NextSequence()
-		if err != nil {
-			return err
-		}
-		key := make([]byte, 8)
-		binary.BigEndian.PutUint64(key, seq)
+		key := compositeKey(msg.Timestamp, msg.MessageID)
 		data, err := json.Marshal(msg)
 		if err != nil {
 			return err
@@ -232,6 +276,9 @@ func knownGroups() []string {
 			return nil
 		})
 	})
+	if len(groups) == 0 {
+		return []string{"general"}
+	}
 	return groups
 }
 
@@ -254,6 +301,41 @@ func historyFor(groupID string) []ChatMessage {
 			}
 			return nil
 		})
+	})
+	return out
+}
+
+func historyForSeek(groupID string, since int64, limit int) []ChatMessage {
+	if limit <= 0 {
+		limit = 50
+	}
+	var out []ChatMessage
+	dbMu.RLock()
+	defer dbMu.RUnlock()
+	if db == nil {
+		return out
+	}
+	db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(groupID))
+		if b == nil {
+			return nil
+		}
+		c := b.Cursor()
+		var k, v []byte
+		if since > 0 {
+			seekKey := make([]byte, 16)
+			binary.BigEndian.PutUint64(seekKey[0:8], uint64(since+1))
+			k, v = c.Seek(seekKey)
+		} else {
+			k, v = c.First()
+		}
+		for ; k != nil && len(out) < limit; k, v = c.Next() {
+			var msg ChatMessage
+			if err := json.Unmarshal(v, &msg); err == nil {
+				out = append(out, msg)
+			}
+		}
+		return nil
 	})
 	return out
 }
@@ -316,5 +398,5 @@ func (s *healthStats) snapshot() (messagesSeen int, maxHops int, lastActivity ti
 }
 
 func isNetworkAdmin() bool {
-	return isAdminLoggingEnabled()
+	return IsAdminNode()
 }

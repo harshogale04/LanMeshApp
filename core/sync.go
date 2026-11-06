@@ -12,22 +12,15 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-const syncProtocolID = "/p2p-chat-sync/1.0.0"
+const syncProtocolID = "/p2p-sync/1.0.0"
 
-// ---------------------------------------------------------------------
-// Admin-mediated reconnection sync.
-//
-// Only an admin node ever INITIATES a sync exchange — "admin takes
-// responsibility to sync." Regular peers never sync with each other and
-// never initiate sync with an admin either; they passively respond when
-// an admin asks. Because only admin initiates, one stream carries both
-// directions:
-//
-//   1. admin  -> peer : admin's manifest (what admin already has)
-//   2. peer   -> admin: messages admin is missing + peer's own manifest
-//   3. admin  -> peer : messages peer is missing (computed AFTER admin's
-//                       own history was updated by step 2)
-// ---------------------------------------------------------------------
+// syncSem limits simultaneous active sync streams to 2, preventing CPU,
+// disk, and Wi-Fi interface saturation.
+var syncSem = make(chan struct{}, 2)
+
+// syncCooldown enforces a 45-second debounce window per peer,
+// preventing connection-flapping sync storms.
+const syncCooldown = 45 * time.Second
 
 type syncGroupManifest struct {
 	GroupID    string   `json:"groupId"`
@@ -75,8 +68,6 @@ func buildLocalManifest() []syncGroupManifest {
 	return manifest
 }
 
-// computeMissing returns every locally-stored message not represented in
-// theirManifest.
 func computeMissing(theirManifest []syncGroupManifest) []ChatMessage {
 	haveByGroup := make(map[string]map[string]bool)
 	for _, g := range theirManifest {
@@ -89,7 +80,7 @@ func computeMissing(theirManifest []syncGroupManifest) []ChatMessage {
 
 	var missing []ChatMessage
 	for _, groupID := range knownGroups() {
-		theyHave := haveByGroup[groupID] // nil if they don't know this group at all
+		theyHave := haveByGroup[groupID]
 		for _, m := range historyFor(groupID) {
 			if m.MessageID == "" {
 				continue
@@ -102,22 +93,26 @@ func computeMissing(theirManifest []syncGroupManifest) []ChatMessage {
 	return missing
 }
 
-// syncServer is the passive side, run on EVERY node. applyFn wires
-// step-3's incoming backfill into save/broadcast/relay, same as a live
-// message.
 func syncServer(s network.Stream, applyFn func(ChatMessage)) {
 	defer s.Close()
+
+	select {
+	case syncSem <- struct{}{}:
+		defer func() { <-syncSem }()
+	default:
+		return
+	}
+
 	dec := json.NewDecoder(s)
 	enc := json.NewEncoder(s)
 
-	// Step 1: read admin's manifest.
+	// Step 1: read their manifest
 	var reqManifest syncManifest
 	if err := dec.Decode(&reqManifest); err != nil {
 		return
 	}
 
-	// Step 2: reply with what admin is missing (per OUR history) plus
-	// our own manifest, so admin can compute OUR gap in step 3.
+	// Step 2: reply with what they are missing + our manifest
 	reply := syncPayload{
 		Missing:  computeMissing(reqManifest.Groups),
 		Manifest: buildLocalManifest(),
@@ -126,7 +121,7 @@ func syncServer(s network.Stream, applyFn func(ChatMessage)) {
 		return
 	}
 
-	// Step 3: read back what WE are missing, apply it.
+	// Step 3: read back what we are missing, apply it
 	var final syncPayload
 	if err := dec.Decode(&final); err != nil {
 		return
@@ -136,24 +131,25 @@ func syncServer(s network.Stream, applyFn func(ChatMessage)) {
 	}
 }
 
-// requestSync is the active side — only ever called when this node is
-// admin (see syncNotifee.Connected below).
 func requestSync(ctx context.Context, host libp2phost.Host, p peer.ID, applyFn func(ChatMessage)) {
-	stream, err := host.NewStream(ctx, p, syncProtocolID)
+	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	stream, err := host.NewStream(sctx, p, syncProtocolID)
 	if err != nil {
-		return // peer may not support sync yet, or just dropped — not fatal
+		return
 	}
 	defer stream.Close()
 
 	dec := json.NewDecoder(stream)
 	enc := json.NewEncoder(stream)
 
-	// Step 1: send our manifest.
+	// Step 1: send our manifest
 	if err := enc.Encode(syncManifest{Groups: buildLocalManifest()}); err != nil {
 		return
 	}
 
-	// Step 2: read what we're missing (per peer's history) + peer's manifest.
+	// Step 2: read what we're missing + their manifest
 	var reply syncPayload
 	if err := dec.Decode(&reply); err != nil {
 		return
@@ -162,38 +158,27 @@ func requestSync(ctx context.Context, host libp2phost.Host, p peer.ID, applyFn f
 		applyFn(m)
 	}
 
-	// Step 3: now that our history includes whatever step 2 just taught
-	// us, compute the peer's gap and push it.
+	// Step 3: send what they are missing
 	final := syncPayload{Missing: computeMissing(reply.Manifest)}
 	if err := enc.Encode(final); err != nil {
 		return
 	}
 }
 
-// ---------------------------------------------------------------------
-// Connection-triggered sync. Connected fires on BOTH sides of a new
-// libp2p connection regardless of who dialed — but only the admin side
-// acts on it.
-// ---------------------------------------------------------------------
-
-const syncCooldown = 30 * time.Second
-
 type syncNotifee struct {
 	ctx     context.Context
 	host    libp2phost.Host
 	applyFn func(ChatMessage)
-	isAdmin func() bool
 
 	mu       sync.Mutex
 	lastSync map[peer.ID]time.Time
 }
 
-func newSyncNotifee(ctx context.Context, host libp2phost.Host, applyFn func(ChatMessage), isAdmin func() bool) *syncNotifee {
+func newSyncNotifee(ctx context.Context, host libp2phost.Host, applyFn func(ChatMessage)) *syncNotifee {
 	return &syncNotifee{
 		ctx:      ctx,
 		host:     host,
 		applyFn:  applyFn,
-		isAdmin:  isAdmin,
 		lastSync: make(map[peer.ID]time.Time),
 	}
 }
@@ -209,14 +194,22 @@ func (n *syncNotifee) shouldSync(p peer.ID) bool {
 }
 
 func (n *syncNotifee) Connected(_ network.Network, c network.Conn) {
-	if !n.isAdmin() {
-		return // "admin takes responsibility to sync" — regular peers never initiate
-	}
 	p := c.RemotePeer()
+	// Glare Prevention: Lexicographical Peer ID tie-breaking (host.ID() < remoteID)
+	// so only one side initiates sync per peer pair
+	if n.host.ID() >= p {
+		return
+	}
 	if !n.shouldSync(p) {
 		return
 	}
 	go func() {
+		select {
+		case syncSem <- struct{}{}:
+			defer func() { <-syncSem }()
+		case <-n.ctx.Done():
+			return
+		}
 		requestSync(n.ctx, n.host, p, n.applyFn)
 	}()
 }

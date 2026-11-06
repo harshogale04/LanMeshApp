@@ -183,12 +183,77 @@
       border-bottom: .5px solid var(--sep)
     }
 
-    .brand h1 {
-      margin: 0;
-      font-size: 1.3rem;
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .brand-badge {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #007aff 0%, #5856d6 50%, #af52de 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(0, 122, 255, .35);
+      flex-shrink: 0;
+      transition: transform .2s var(--ease-out);
+    }
+
+    .brand:hover .brand-badge {
+      transform: scale(1.06) rotate(4deg);
+    }
+
+    .brand-icon {
+      width: 18px;
+      height: 18px;
+    }
+
+    .brand-text {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -.03em;
+      line-height: 1;
+      color: var(--label);
+    }
+
+    .brand-highlight {
+      background: linear-gradient(135deg, #007aff 0%, #5856d6 50%, #00c7be 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    :root[data-theme="dark"] .brand-highlight,
+    @media(prefers-color-scheme:dark) {
+      :root:not([data-theme="light"]) .brand-highlight {
+        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+    }
+
+    .brand-chip {
+      font-size: .6rem;
       font-weight: 700;
-      letter-spacing: -.02em;
-      line-height: 1.1
+      letter-spacing: .06em;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(0, 122, 255, .1);
+      color: var(--tint);
+      border: .5px solid rgba(0, 122, 255, .25);
+      line-height: 1.2;
+      text-transform: uppercase;
     }
 
     .status-pill {
@@ -198,7 +263,14 @@
       font-size: .8rem;
       color: var(--label2);
       margin-right: auto;
-      cursor: pointer
+      cursor: pointer;
+      min-width: 0;
+    }
+
+    #statusText {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .status-dot {
@@ -572,6 +644,93 @@
 
     .meta .edited-tag {
       opacity: .8
+    }
+
+    .hop-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: .68rem;
+      font-weight: 500;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--fill2);
+      color: var(--label2);
+      cursor: help;
+      vertical-align: middle;
+      user-select: none;
+      margin-left: 4px;
+    }
+
+    .hop-badge:hover {
+      background: var(--fill);
+      color: var(--label);
+    }
+
+    .chat-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--tint);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .72rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+      user-select: none;
+      margin-bottom: 2px;
+    }
+
+    .chat-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .profile-avatar-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: .65rem;
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity .15s;
+    }
+
+    .profile-avatar:hover .profile-avatar-overlay {
+      opacity: 1;
+    }
+
+    .profile-avatar-btn-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .avatar-action-btn {
+      background: var(--fill2);
+      color: var(--tint);
+      font-size: .78rem;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      border: none;
+      transition: background-color .15s;
+    }
+
+    .avatar-action-btn:hover {
+      background: var(--fill);
     }
 
     .bubble-wrap {
@@ -1032,11 +1191,14 @@
     }
 
     #callScreen {
-      background: #000;
-      z-index: 40;
+      background: #090a0f;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      color: #fff
+      justify-content: space-between;
+      color: #fff;
+      overflow: hidden;
     }
 
     #roomScreen {
@@ -1052,52 +1214,365 @@
       transition-delay: 0s
     }
 
+    /* Call Screen Ambient Glow & Glass */
+    .call-backdrop {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .call-glow-blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    .call-glow-blob.blob-1 {
+      width: 280px;
+      height: 280px;
+      top: -40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: radial-gradient(circle, #4f46e5 0%, #06b6d4 100%);
+    }
+
+    .call-glow-blob.blob-2 {
+      width: 320px;
+      height: 320px;
+      bottom: -60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: radial-gradient(circle, #7c3aed 0%, #1e1b4b 100%);
+    }
+
+    /* Top Security Pill */
+    .call-top-bar {
+      position: relative;
+      z-index: 5;
+      width: 100%;
+      padding-top: calc(24px + env(safe-area-inset-top, 0px));
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .call-security-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.08);
+      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(16px);
+      border: 0.5px solid rgba(255, 255, 255, 0.15);
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.82);
+      letter-spacing: 0.02em;
+    }
+
+    /* Center Call Card & Avatar */
+    .call-card {
+      position: relative;
+      z-index: 4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-top: 15px;
+      transition: all 0.3s var(--ease-out);
+    }
+
+    .call-card.in-video-call {
+      position: absolute;
+      top: calc(70px + env(safe-area-inset-top, 0px));
+      left: 0;
+      right: 0;
+      margin-top: 0;
+      background: rgba(0, 0, 0, 0.45);
+      -webkit-backdrop-filter: blur(14px);
+      backdrop-filter: blur(14px);
+      padding: 8px 16px;
+      border-radius: 20px;
+      max-width: 200px;
+      margin-left: auto;
+      margin-right: auto;
+      border: 0.5px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .call-card.in-video-call .call-avatar-outer {
+      display: none;
+    }
+
+    .call-card.in-video-call .call-caller-status {
+      display: none;
+    }
+
+    .call-card.in-video-call .call-caller-name {
+      font-size: 1rem;
+    }
+
+    /* Avatar Outer & Pulsing Ripple Rings */
+    .call-avatar-outer {
+      position: relative;
+      width: 130px;
+      height: 130px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .call-ripple-ring {
+      position: absolute;
+      inset: -12px;
+      border-radius: 50%;
+      border: 2px solid rgba(0, 122, 255, 0.45);
+      opacity: 0;
+      animation: call-pulse-ring 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+      pointer-events: none;
+    }
+
+    .call-ripple-ring.ring-2 {
+      animation-delay: 0.8s;
+      border-color: rgba(99, 102, 241, 0.45);
+    }
+
+    .call-ripple-ring.ring-3 {
+      animation-delay: 1.6s;
+      border-color: rgba(168, 85, 247, 0.35);
+    }
+
+    @keyframes call-pulse-ring {
+      0% {
+        transform: scale(0.85);
+        opacity: 0.85;
+      }
+      60% {
+        opacity: 0.25;
+      }
+      100% {
+        transform: scale(1.7);
+        opacity: 0;
+      }
+    }
+
+    .call-avatar {
+      width: 118px;
+      height: 118px;
+      border-radius: 50%;
+      overflow: hidden;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 0 4px rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.6rem;
+      font-weight: 700;
+      color: #fff;
+      z-index: 2;
+      position: relative;
+      background: #1c1c1e;
+    }
+
+    .call-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .call-caller-name {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      margin-bottom: 6px;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .call-caller-status {
+      font-size: 0.95rem;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.72);
+      letter-spacing: 0.01em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .call-timer {
+      margin-top: 4px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--green);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.05em;
+    }
+
+    /* Video stream styling */
     #remoteVideo {
       width: 100%;
       height: 100%;
       object-fit: cover;
       position: absolute;
       inset: 0;
-      background: #1c1c1e
+      background: #000;
+      z-index: 1;
     }
 
     #localVideo {
       position: absolute;
-      width: 100px;
-      height: 140px;
-      right: 14px;
-      top: calc(14px + env(safe-area-inset-top, 0px));
-      border-radius: 14px;
+      width: 110px;
+      height: 155px;
+      right: 16px;
+      top: calc(20px + env(safe-area-inset-top, 0px));
+      border-radius: 16px;
       object-fit: cover;
-      background: #2c2c2e;
-      z-index: 2;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, .4)
+      background: #1c1c1e;
+      z-index: 10;
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.6), 0 0 0 1.5px rgba(255, 255, 255, 0.2);
     }
 
-    .call-label {
-      position: absolute;
-      top: calc(64px + env(safe-area-inset-top, 0px));
-      font-size: 1.2rem;
-      font-weight: 600;
-      z-index: 2;
-      text-align: center;
+    /* Action Controls Rows (Calling & Ringing) */
+    .call-actions-container {
+      position: relative;
+      z-index: 10;
       width: 100%;
-      text-shadow: 0 1px 8px rgba(0, 0, 0, .5)
-    }
-
-    .call-status-row,
-    .call-controls-row {
-      position: absolute;
-      bottom: calc(36px + env(safe-area-inset-bottom, 0px));
-      left: 0;
-      right: 0;
-      z-index: 2;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 24px
+      gap: 56px;
+      padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
     }
 
+    .call-action-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .call-action-btn {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      transition: transform 0.15s var(--ease-out), filter 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .call-action-btn:active {
+      transform: scale(0.9);
+    }
+
+    .call-action-btn.end {
+      background: linear-gradient(135deg, #ff453a 0%, #d70015 100%);
+    }
+
+    .call-action-btn.accept {
+      background: linear-gradient(135deg, #30d158 0%, #248a3d 100%);
+    }
+
+    .call-action-btn.accept.pulse {
+      box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.7);
+      animation: accept-button-glow 1.8s infinite;
+    }
+
+    @keyframes accept-button-glow {
+      0% {
+        box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 18px rgba(48, 209, 88, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(48, 209, 88, 0);
+      }
+    }
+
+    .call-action-btn .ic {
+      width: 32px;
+      height: 32px;
+    }
+
+    .call-action-label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.85);
+      letter-spacing: 0.02em;
+    }
+
+    /* Floating Glass Dock for Active Call */
+    .call-dock {
+      position: absolute;
+      bottom: calc(36px + env(safe-area-inset-bottom, 0px));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 20px;
+      border-radius: 40px;
+      background: rgba(24, 24, 27, 0.75);
+      -webkit-backdrop-filter: blur(24px);
+      backdrop-filter: blur(24px);
+      border: 0.5px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .dock-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.15s, background-color 0.2s;
+    }
+
+    .dock-btn:active {
+      transform: scale(0.92);
+    }
+
+    .dock-btn .ic {
+      width: 24px;
+      height: 24px;
+    }
+
+    .dock-label {
+      font-size: 0.65rem;
+      color: rgba(255, 255, 255, 0.7);
+      display: none;
+    }
+
+    .dock-btn.active {
+      background: #fff;
+      color: #000;
+    }
+
+    .dock-btn.end {
+      background: linear-gradient(135deg, #ff453a 0%, #d70015 100%) !important;
+      color: #fff !important;
+    }
+
+    /* Keep Room Call Button support */
     .call-btn {
       width: 64px;
       height: 64px;
@@ -1109,13 +1584,6 @@
       justify-content: center;
       font-size: 1.6rem;
       transition: transform .14s var(--ease-out), background-color .2s
-    }
-
-    #callScreen .call-btn {
-      background: rgba(120, 120, 128, .45);
-      color: #fff;
-      -webkit-backdrop-filter: blur(20px);
-      backdrop-filter: blur(20px)
     }
 
     .call-btn.end {
@@ -1227,19 +1695,30 @@
     }
 
     .profile-avatar {
-      width: 76px;
-      height: 76px;
+      width: 82px;
+      height: 82px;
       border-radius: 50%;
       background: var(--tint);
       color: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.7rem;
+      font-size: 1.8rem;
       font-weight: 700;
       letter-spacing: -.02em;
       box-shadow: 0 6px 20px rgba(0, 122, 255, .28);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .profile-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
 
     .profile-avatar-sub {
@@ -1645,13 +2124,43 @@
         <circle cx="12" cy="12" r="4" />
         <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
       </symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24">
+        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/>
+      </symbol>
+      <symbol id="i-phone-off" viewBox="0 0 24 24">
+        <path d="M10.68 13.31a16 16 0 003.95 3.95l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7 2 2 0 011.72 2v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.42 19.42 0 01-3.33-2.67m-2.67-3.34a19.79 19.79 0 01-3.07-8.63A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91M1 1l22 22"/>
+      </symbol>
+      <symbol id="i-mesh-logo" viewBox="0 0 32 32">
+        <path d="M16 3L28 9.5V22.5L16 29L4 22.5V9.5L16 3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="16" cy="3" r="2.5" fill="currentColor"/>
+        <circle cx="28" cy="9.5" r="2.5" fill="currentColor"/>
+        <circle cx="28" cy="22.5" r="2.5" fill="currentColor"/>
+        <circle cx="16" cy="29" r="2.5" fill="currentColor"/>
+        <circle cx="4" cy="22.5" r="2.5" fill="currentColor"/>
+        <circle cx="4" cy="9.5" r="2.5" fill="currentColor"/>
+        <circle cx="16" cy="16" r="3.5" fill="currentColor"/>
+        <line x1="16" y1="16" x2="16" y2="3" stroke="currentColor" stroke-width="1.8"/>
+        <line x1="16" y1="16" x2="28" y2="9.5" stroke="currentColor" stroke-width="1.8"/>
+        <line x1="16" y1="16" x2="28" y2="22.5" stroke="currentColor" stroke-width="1.8"/>
+        <line x1="16" y1="16" x2="16" y2="29" stroke="currentColor" stroke-width="1.8"/>
+        <line x1="16" y1="16" x2="4" y2="22.5" stroke="currentColor" stroke-width="1.8"/>
+        <line x1="16" y1="16" x2="4" y2="9.5" stroke="currentColor" stroke-width="1.8"/>
+      </symbol>
     </defs>
   </svg>
 
   <div id="app">
     <header>
       <div class="brand">
-        <h1>LanMesh</h1>
+        <div class="brand-badge">
+          <svg class="brand-icon" viewBox="0 0 32 32">
+            <use href="#i-mesh-logo" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">Lan<span class="brand-highlight">Mesh</span></span>
+          <span class="brand-chip">P2P</span>
+        </div>
       </div>
       <div class="status-pill" id="statusPill" title="Mesh health, tap for details" onclick="openTopology()">
         <span class="status-dot" id="statusDot"></span><span id="statusText">mDNS discovery active</span>
@@ -1822,7 +2331,18 @@
       </div>
 
       <div class="profile-avatar-wrap">
-        <div class="profile-avatar" id="profileAvatar">ME</div>
+        <div class="profile-avatar" id="profileAvatar" onclick="promptUploadAvatar()" title="Click to change photo">
+          <span id="profileAvatarInitials">ME</span>
+          <div class="profile-avatar-overlay">
+            <svg class="ic" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+            <span>Change</span>
+          </div>
+        </div>
+        <input type="file" id="avatarFileInput" accept="image/*" style="display:none;" onchange="handleAvatarFileSelected(event)">
+        <div class="profile-avatar-btn-row">
+          <button type="button" class="avatar-action-btn" onclick="promptUploadAvatar()">Change Photo</button>
+          <button type="button" class="avatar-action-btn" id="removeAvatarBtn" onclick="removeAvatar()" style="display:none;color:var(--red);">Remove</button>
+        </div>
         <div class="profile-avatar-sub">
           <span class="status-dot"></span>
           <span>Online on Local Mesh</span>
@@ -1861,10 +2381,10 @@
         <div class="profile-card">
           <div class="profile-row-item">
             <div>
-              <div class="profile-row-label">Designated Admin</div>
-              <div class="profile-hint">Bridges mesh messages and syncs history.</div>
+              <div class="profile-row-label">Admin Station</div>
+              <div class="profile-hint" id="profileAdminDesc">Authoritative forensic reference &amp; audit station.</div>
             </div>
-            <button class="profile-tag-btn" id="profileAdminBtn" onclick="toggleAdminFromProfile()">Enable</button>
+            <button class="profile-tag-btn" id="profileAdminBtn" onclick="handleProfileAdminClick()">Status</button>
           </div>
         </div>
       </div>
@@ -1883,36 +2403,84 @@
     </div>
 
     <div id="callScreen">
-      <video id="remoteVideo" autoplay playsinline></video>
-      <video id="localVideo" autoplay playsinline muted></video>
+      <!-- Hidden poster to prevent Android WebView play button placeholder -->
+      <video id="remoteVideo" autoplay playsinline poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" style="display:none;"></video>
+      <video id="localVideo" autoplay playsinline muted poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" style="display:none;"></video>
 
-      <div class="call-label" id="callLabel"></div>
-
-      <div id="callStateCalling" class="call-status-row" style="display:none;">
-        <button class="call-btn end" onclick="hangUp()"><svg class="ic">
-            <use href="#i-x" />
-          </svg></button>
+      <!-- Background Ambient Glow -->
+      <div class="call-backdrop">
+        <div class="call-glow-blob blob-1"></div>
+        <div class="call-glow-blob blob-2"></div>
       </div>
 
-      <div id="callStateRinging" class="call-status-row" style="display:none;">
-        <button class="call-btn accept" onclick="acceptCall()"><svg class="ic">
-            <use href="#i-check" />
-          </svg></button>
-        <button class="call-btn end" onclick="declineCall()"><svg class="ic">
-            <use href="#i-x" />
-          </svg></button>
+      <!-- Top Bar: Encryption indicator -->
+      <div class="call-top-bar">
+        <div class="call-security-pill">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <span>P2P Direct Encrypted</span>
+        </div>
       </div>
 
-      <div id="callStateActive" class="call-controls-row" style="display:none;">
-        <button class="call-btn" id="muteBtn" onclick="toggleMute()"><svg class="ic">
-            <use href="#i-mic" />
-          </svg></button>
-        <button class="call-btn" id="cameraBtn" onclick="toggleCamera()"><svg class="ic">
-            <use href="#i-cam" />
-          </svg></button>
-        <button class="call-btn end" onclick="hangUp()"><svg class="ic">
-            <use href="#i-x" />
-          </svg></button>
+      <!-- Caller Information Card & Pulsing Avatar -->
+      <div class="call-card" id="callCenterCard">
+        <div class="call-avatar-outer">
+          <div class="call-ripple-ring ring-1"></div>
+          <div class="call-ripple-ring ring-2"></div>
+          <div class="call-ripple-ring ring-3"></div>
+          <div class="call-avatar" id="callAvatarEl">
+            <span id="callAvatarInitials">--</span>
+          </div>
+        </div>
+        <div class="call-caller-name" id="callCallerName">Peer</div>
+        <div class="call-caller-status" id="callCallerStatus">Incoming Video Call…</div>
+        <div class="call-timer" id="callActiveTimer" style="display:none;">00:00</div>
+      </div>
+
+      <div class="call-label" id="callLabel" style="display:none;"></div>
+
+      <!-- Outgoing Calling Actions -->
+      <div id="callStateCalling" class="call-actions-container" style="display:none;">
+        <div class="call-action-col">
+          <button class="call-action-btn end" onclick="hangUp()" title="Cancel Call">
+            <svg class="ic"><use href="#i-phone-off" /></svg>
+          </button>
+          <span class="call-action-label">Cancel</span>
+        </div>
+      </div>
+
+      <!-- Incoming Ringing Actions -->
+      <div id="callStateRinging" class="call-actions-container" style="display:none;">
+        <div class="call-action-col">
+          <button class="call-action-btn end" onclick="declineCall()" title="Decline Call">
+            <svg class="ic"><use href="#i-phone-off" /></svg>
+          </button>
+          <span class="call-action-label">Decline</span>
+        </div>
+        <div class="call-action-col">
+          <button class="call-action-btn accept pulse" onclick="acceptCall()" title="Accept Call">
+            <svg class="ic"><use href="#i-phone" /></svg>
+          </button>
+          <span class="call-action-label">Accept</span>
+        </div>
+      </div>
+
+      <!-- Active In-Call Floating Glass Dock -->
+      <div id="callStateActive" class="call-dock" style="display:none;">
+        <button class="dock-btn" id="muteBtn" onclick="toggleMute()" title="Mute/Unmute Mic">
+          <svg class="ic"><use href="#i-mic" /></svg>
+          <span class="dock-label">Mute</span>
+        </button>
+        <button class="dock-btn" id="cameraBtn" onclick="toggleCamera()" title="Toggle Camera">
+          <svg class="ic"><use href="#i-cam" /></svg>
+          <span class="dock-label">Camera</span>
+        </button>
+        <button class="dock-btn end" onclick="hangUp()" title="End Call">
+          <svg class="ic"><use href="#i-phone-off" /></svg>
+          <span class="dock-label">End</span>
+        </button>
       </div>
     </div>
 
@@ -2194,12 +2762,109 @@
     // ------------------------------------------------------------
     // PROFILE SHEET LOGIC
     // ------------------------------------------------------------
-    function updateAvatarDisplay(nick) {
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    const AVATAR_COLORS = [
+      '#007aff', '#34c759', '#af52de', '#ff9500', '#5856d6',
+      '#ff2d55', '#30b0c7', '#00c7be', '#32ade6', '#ff3b30'
+    ];
+    function getAvatarColor(str) {
+      if (!str) return AVATAR_COLORS[0];
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    }
+
+    let myAvatar = localStorage.getItem('lanmesh_avatar') || '';
+    const peerAvatars = new Map();
+
+    function updateAvatarDisplay(nick, avatar) {
       const avatarEl = document.getElementById('profileAvatar');
       if (!avatarEl) return;
-      const clean = (nick || "ME").trim();
-      const initials = clean.length <= 2 ? clean.toUpperCase() : clean.substring(0, 2).toUpperCase();
-      avatarEl.textContent = initials;
+      const removeBtn = document.getElementById('removeAvatarBtn');
+      const av = avatar !== undefined ? avatar : myAvatar;
+      if (av) {
+        avatarEl.innerHTML = `<img src="${av}" alt="Profile" />
+          <div class="profile-avatar-overlay">
+            <svg class="ic" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+            <span>Change</span>
+          </div>`;
+        if (removeBtn) removeBtn.style.display = 'inline-block';
+      } else {
+        const clean = (nick || "ME").trim();
+        const initials = clean.length <= 2 ? clean.toUpperCase() : clean.substring(0, 2).toUpperCase();
+        avatarEl.innerHTML = `<span id="profileAvatarInitials">${escapeHtml(initials)}</span>
+          <div class="profile-avatar-overlay">
+            <svg class="ic" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+            <span>Change</span>
+          </div>`;
+        avatarEl.style.background = getAvatarColor(clean);
+        if (removeBtn) removeBtn.style.display = 'none';
+      }
+    }
+
+    function promptUploadAvatar() {
+      const input = document.getElementById('avatarFileInput');
+      if (input) input.click();
+    }
+
+    function handleAvatarFileSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        showToast("Please choose an image file");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const maxDim = 128;
+          let w = img.width;
+          let h = img.height;
+          if (w > h) {
+            if (w > maxDim) {
+              h = Math.round(h * (maxDim / w));
+              w = maxDim;
+            }
+          } else {
+            if (h > maxDim) {
+              w = Math.round(w * (maxDim / h));
+              h = maxDim;
+            }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const resizedData = canvas.toDataURL('image/jpeg', 0.82);
+          myAvatar = resizedData;
+          localStorage.setItem('lanmesh_avatar', myAvatar);
+          updateAvatarDisplay(myNickname, myAvatar);
+          announceIdentity();
+          renderChat();
+          showToast("Profile photo updated!");
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    }
+
+    function removeAvatar() {
+      myAvatar = '';
+      localStorage.removeItem('lanmesh_avatar');
+      updateAvatarDisplay(myNickname, '');
+      announceIdentity();
+      renderChat();
+      showToast("Profile photo removed");
     }
 
     function openProfile() {
@@ -2225,14 +2890,7 @@
       }
 
       if (adminBtn) {
-        const isAdmin = localStorage.getItem('lanmesh_admin_active') === '1';
-        if (isAdmin) {
-          adminBtn.textContent = "Active";
-          adminBtn.classList.add('active');
-        } else {
-          adminBtn.textContent = "Enable";
-          adminBtn.classList.remove('active');
-        }
+        refreshAdminStatusUI();
       }
 
       panel.classList.add('open');
@@ -2279,36 +2937,64 @@
       });
     }
 
-    async function toggleAdminFromProfile() {
+    async function refreshAdminStatusUI() {
       const adminBtn = document.getElementById('profileAdminBtn');
-      const currentlyActive = localStorage.getItem('lanmesh_admin_active') === '1';
-      if (currentlyActive) {
-        showToast("Admin mode is active on this device");
-        return;
-      }
-      const confirmed = await uiConfirm({
-        title: "Enable Network Admin?",
-        message: "Only enable on ONE device per physical network. The admin node syncs message history and relays between network segments.",
-        confirmText: "Enable Admin",
-        cancelText: "Cancel"
-      });
-      if (!confirmed) return;
-      fetch('/admin/enable', { method: 'POST' })
-        .then(res => {
-          if (res.ok) {
-            localStorage.setItem('lanmesh_admin_active', '1');
-            if (adminBtn) {
-              adminBtn.textContent = "Active";
-              adminBtn.classList.add('active');
-            }
-            showToast("Network Admin Mode enabled");
+      const adminDesc = document.getElementById('profileAdminDesc');
+      if (!adminBtn) return;
+      try {
+        const res = await fetch('/is-admin');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.isAdmin) {
+          if (data.sessionActive) {
+            adminBtn.textContent = "Dashboard";
+            adminBtn.classList.add('active');
+            if (adminDesc) adminDesc.textContent = "Admin Station active (session authenticated).";
           } else {
-            showToast("Failed to enable admin logging");
+            adminBtn.textContent = "Login";
+            adminBtn.classList.remove('active');
+            if (adminDesc) adminDesc.textContent = "Admin Station active. Login to access audit dashboard.";
           }
-        })
-        .catch(err => {
-          showToast("Admin request failed: " + err.message);
-        });
+        } else {
+          adminBtn.textContent = "Setup";
+          adminBtn.classList.remove('active');
+          if (adminDesc) adminDesc.textContent = "Standard peer node. Tap Setup to configure as Admin Station.";
+        }
+      } catch (err) {}
+    }
+
+    async function handleProfileAdminClick() {
+      try {
+        const res = await fetch('/is-admin');
+        const data = await res.json();
+        if (data.isAdmin) {
+          window.open('/admin', '_blank');
+        } else {
+          const secret = await uiPrompt({
+            title: "Configure Admin Station",
+            message: "Enter the network Admin Secret to activate this device as an Authoritative Admin Station:",
+            placeholder: "Admin Secret (e.g. pspadmin)",
+            confirmText: "Activate Admin",
+            cancelText: "Cancel"
+          });
+          if (secret && secret.trim()) {
+            const confRes = await fetch('/admin/configure', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ secret: secret.trim() })
+            });
+            if (confRes.ok) {
+              showToast("Admin station activated on this device!");
+              await refreshAdminStatusUI();
+              window.open('/admin', '_blank');
+            } else {
+              showToast("Failed to configure admin secret");
+            }
+          }
+        }
+      } catch (err) {
+        showToast("Unable to reach node status endpoint.");
+      }
     }
 
     async function handleClearChats() {
@@ -2348,23 +3034,8 @@
       openProfile();
     }
 
-    // ---- Admin prompt ----
-    async function askAdminStatus() {
-      if (localStorage.getItem('lanmesh_admin_asked')) return;
-      localStorage.setItem('lanmesh_admin_asked', '1');
-      const isAdmin = await uiConfirm({
-        title: "Designated Admin?",
-        message: "Are you the designated admin for this network?\n\nAdmins sync history and relay messages between separate networks. Only enable on ONE device per network.",
-        confirmText: "Enable Admin",
-        cancelText: "Not Now"
-      });
-      if (!isAdmin) return;
-      localStorage.setItem('lanmesh_admin_active', '1');
-      fetch('/admin/enable', { method: 'POST' })
-        .then(res => { if (!res.ok) console.error('Failed to enable admin logging:', res.status); })
-        .catch(err => console.error('Admin enable request failed:', err));
-    }
-    askAdminStatus();
+    // Check admin station status on load
+    refreshAdminStatusUI();
 
     // ---- Group state ----
     function normalizeGroup(str) {
@@ -2506,7 +3177,8 @@
       if (!myNickname) return;
       sendWsJson({
         type: 'peer-identity',
-        nickname: myNickname
+        nickname: myNickname,
+        avatar: myAvatar || ''
       });
     }
 
@@ -2535,22 +3207,32 @@
         addGroupOption(msg.payload);
         return;
       }
+      if (msg.type === "ping") {
+        if (msg.sender && msg.sender !== myPeerId && msg.nickname) {
+          const name = sanitizePeerName(msg.nickname);
+          if (name) peerNames.set(msg.sender, { name, lastSeen: Date.now() });
+        }
+        return;
+      }
       if (msg.type === "peer-identity") {
-        // Register the sender's display name — informational only, not trusted for auth.
         if (msg.sender && msg.sender !== myPeerId) {
           const name = sanitizePeerName(msg.nickname);
           if (name) {
             peerNames.set(msg.sender, { name, lastSeen: Date.now() });
+            if (msg.avatar) {
+              peerAvatars.set(msg.sender, msg.avatar);
+              renderChat();
+            }
             if (document.getElementById('topologyPanel').classList.contains('open')) {
               refreshTopology();
             }
           }
-          // If this was an initial broadcast from peer, send our own identity back directly to them
           if (!msg.to && myNickname) {
             sendWsJson({
               type: 'peer-identity',
               to: msg.sender,
-              nickname: myNickname
+              nickname: myNickname,
+              avatar: myAvatar || ''
             });
           }
         }
@@ -2580,10 +3262,15 @@
         return;
       }
 
-      // Register nickname from any incoming chat message for peer name display
-      if (msg.sender && msg.sender !== myPeerId && msg.nickname) {
-        const name = sanitizePeerName(msg.nickname);
-        if (name) peerNames.set(msg.sender, { name, lastSeen: Date.now() });
+      // Register nickname and avatar from incoming chat messages
+      if (msg.sender && msg.sender !== myPeerId) {
+        if (msg.nickname) {
+          const name = sanitizePeerName(msg.nickname);
+          if (name) peerNames.set(msg.sender, { name, lastSeen: Date.now() });
+        }
+        if (msg.avatar) {
+          peerAvatars.set(msg.sender, msg.avatar);
+        }
       }
 
       msg.groupId = normalizeGroup(msg.groupId);
@@ -2689,6 +3376,7 @@
 
     function sendMessage(type, payload, fileName) {
       const msg = { type, payload, groupId: currentGroup, nickname: myNickname };
+      if (myAvatar) msg.avatar = myAvatar;
       if (fileName) msg.fileName = fileName;
       ws.send(JSON.stringify(msg));
     }
@@ -2810,12 +3498,46 @@
       const senderLabel = msg.isSelf ? "You" : (msg.nickname || (msg.sender || "peer").substring(0, 8));
       const timeLabel = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
+      let hopBadgeHtml = '';
+      if (!msg.isSelf && msg.hops !== undefined && msg.hops !== null && msg.hops > 0) {
+        let badgeText = '';
+        if (msg.hops === 1) {
+          badgeText = '⚡ Direct';
+        } else if (msg.hops === 2) {
+          badgeText = '🔄 1 relay';
+        } else if (msg.hops >= 3) {
+          badgeText = `🌐 ${msg.hops} hops`;
+        }
+        if (badgeText) {
+          let routeStr = '';
+          if (Array.isArray(msg.hopTrail) && msg.hopTrail.length > 0) {
+            routeStr = 'Route: ' + msg.hopTrail.map(p => p.length > 12 ? p.substring(0, 8) + '...' : p).join(' → ');
+          } else if (msg.sender) {
+            routeStr = 'Route: ' + (msg.sender.length > 12 ? msg.sender.substring(0, 8) + '...' : msg.sender);
+          }
+          const escapedRoute = routeStr.replace(/"/g, '&quot;');
+          hopBadgeHtml = `<span class="hop-badge" title="${escapedRoute}">${badgeText}</span>`;
+        }
+      }
+
       const meta = document.createElement('div');
       meta.className = 'meta';
-      meta.innerHTML = `<span>${senderLabel}</span><span class="tag">#${msg.groupId}</span>${timeLabel ? `<span class="time">${timeLabel}</span>` : ''}${(editedText && !isDeleted) ? `<span class="edited-tag">(edited)</span>` : ''}`;
+      meta.innerHTML = `<span>${senderLabel}</span><span class="tag">#${msg.groupId}</span>${timeLabel ? `<span class="time">${timeLabel}</span>` : ''}${hopBadgeHtml}${(editedText && !isDeleted) ? `<span class="edited-tag">(edited)</span>` : ''}`;
 
       const bubbleWrap = document.createElement('div');
       bubbleWrap.className = 'bubble-wrap';
+
+      const avatarWrap = document.createElement('div');
+      avatarWrap.className = 'chat-avatar';
+      const effectiveAvatar = msg.isSelf ? myAvatar : (msg.avatar || peerAvatars.get(msg.sender));
+      if (effectiveAvatar) {
+        avatarWrap.innerHTML = `<img src="${effectiveAvatar}" alt="${escapeHtml(senderLabel)}" />`;
+      } else {
+        const initials = (senderLabel || "P").substring(0, 2).toUpperCase();
+        avatarWrap.textContent = initials;
+        avatarWrap.style.background = getAvatarColor(msg.sender || senderLabel);
+      }
+      avatarWrap.title = senderLabel;
 
       const bubble = document.createElement('div');
       bubble.className = 'bubble' + (isDeleted ? ' deleted' : '');
@@ -2879,6 +3601,7 @@
         }
       }
 
+      bubbleWrap.appendChild(avatarWrap);
       bubbleWrap.appendChild(bubble);
       bubbleWrap.appendChild(actions);
 
@@ -3120,6 +3843,34 @@
       return conn;
     }
 
+    let callDurationTimer = null;
+    let callStartTime = 0;
+
+    function startCallDurationTimer() {
+      stopCallDurationTimer();
+      callStartTime = Date.now();
+      const timerEl = document.getElementById('callActiveTimer');
+      if (timerEl) {
+        timerEl.textContent = '00:00';
+        timerEl.style.display = 'block';
+      }
+      callDurationTimer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+        const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const s = String(elapsed % 60).padStart(2, '0');
+        if (timerEl) timerEl.textContent = `${m}:${s}`;
+      }, 1000);
+    }
+
+    function stopCallDurationTimer() {
+      if (callDurationTimer) {
+        clearInterval(callDurationTimer);
+        callDurationTimer = null;
+      }
+      const timerEl = document.getElementById('callActiveTimer');
+      if (timerEl) timerEl.style.display = 'none';
+    }
+
     async function startCall(peerId, mode = 'video') {
       if (callState !== 'idle' || inRoomCall) { showToast("Already in an active call"); return; }
       callPeerId = peerId;
@@ -3149,13 +3900,13 @@
       const localVid = document.getElementById('localVideo');
       if (localVid) {
         localVid.srcObject = localStream;
-        localVid.style.display = (callMode === 'video') ? 'block' : 'none';
+        localVid.style.display = 'none'; // Keep hidden until call is accepted/active!
       }
 
       pc = newPeerConnection();
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      sendCallSignal('call-offer', callPeerId, { sdp: offer, mode: callMode, nickname: myNickname || 'Peer' });
+      sendCallSignal('call-offer', callPeerId, { sdp: offer, mode: callMode, nickname: myNickname || 'Peer', avatar: myAvatar });
     }
 
     function handleIncomingOffer(msg) {
@@ -3174,6 +3925,14 @@
       pendingOffer = body.sdp;
       callMode = body.mode || 'video';
 
+      if (body.avatar) {
+        peerAvatars.set(msg.sender, body.avatar);
+      }
+      if (body.nickname && !msg.nickname) {
+        const callerName = sanitizePeerName(body.nickname);
+        if (callerName) peerNames.set(msg.sender, { name: callerName, lastSeen: Date.now() });
+      }
+
       clearCallTimer();
       callTimeoutTimer = setTimeout(() => {
         if (callState === 'ringing') {
@@ -3188,7 +3947,6 @@
     async function acceptCall() {
       clearCallTimer();
       callState = 'active';
-      showCallScreen('active', `In call with ${peerDisplayName(callPeerId)}`);
 
       try {
         const constraints = { audio: true, video: callMode === 'video' };
@@ -3202,14 +3960,15 @@
       const localVid = document.getElementById('localVideo');
       if (localVid) {
         localVid.srcObject = localStream;
-        localVid.style.display = (callMode === 'video') ? 'block' : 'none';
       }
+
+      showCallScreen('active', `In call with ${peerDisplayName(callPeerId)}`);
 
       pc = newPeerConnection();
       await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      sendCallSignal('call-answer', callPeerId, { sdp: answer, mode: callMode, nickname: myNickname || 'Peer' });
+      sendCallSignal('call-answer', callPeerId, { sdp: answer, mode: callMode, nickname: myNickname || 'Peer', avatar: myAvatar });
     }
 
     function declineCall() {
@@ -3222,6 +3981,9 @@
       if (callState !== 'calling' || !pc) return;
       clearCallTimer();
       const body = JSON.parse(msg.payload);
+      if (body.avatar) {
+        peerAvatars.set(msg.sender, body.avatar);
+      }
       await pc.setRemoteDescription(new RTCSessionDescription(body.sdp));
       callState = 'active';
       showCallScreen('active', `In call with ${peerDisplayName(callPeerId)}`);
@@ -3246,6 +4008,7 @@
 
     function endCall() {
       clearCallTimer();
+      stopCallDurationTimer();
       if (pc) {
         try { pc.close(); } catch (e) { }
         pc = null;
@@ -3257,24 +4020,115 @@
         localStream = null;
       }
       const localVid = document.getElementById('localVideo');
-      if (localVid) localVid.srcObject = null;
+      if (localVid) {
+        localVid.srcObject = null;
+        localVid.style.display = 'none';
+      }
       const remoteVid = document.getElementById('remoteVideo');
-      if (remoteVid) remoteVid.srcObject = null;
+      if (remoteVid) {
+        remoteVid.srcObject = null;
+        remoteVid.style.display = 'none';
+      }
+
+      const screen = document.getElementById('callScreen');
+      if (screen) {
+        screen.classList.remove('open');
+        screen.removeAttribute('data-state');
+      }
+      const centerCard = document.getElementById('callCenterCard');
+      if (centerCard) {
+        centerCard.classList.remove('in-video-call');
+      }
 
       callPeerId = null;
       callState = 'idle';
       pendingOffer = null;
-      document.getElementById('callScreen').classList.remove('open');
     }
 
     function showCallScreen(state, label) {
-      document.getElementById('callScreen').classList.add('open');
-      document.getElementById('callLabel').textContent = label;
-      document.getElementById('callStateCalling').style.display = state === 'calling' ? 'flex' : 'none';
-      document.getElementById('callStateRinging').style.display = state === 'ringing' ? 'flex' : 'none';
-      document.getElementById('callStateActive').style.display = state === 'active' ? 'flex' : 'none';
+      const screen = document.getElementById('callScreen');
+      if (!screen) return;
+      screen.classList.add('open');
+      screen.setAttribute('data-state', state);
+
+      const targetId = callPeerId;
+      const targetName = peerDisplayName(targetId);
+      const targetAvatar = (targetId && peerAvatars.get(targetId)) || '';
+
+      const avatarEl = document.getElementById('callAvatarEl');
+      const callerNameEl = document.getElementById('callCallerName');
+      const callerStatusEl = document.getElementById('callCallerStatus');
+      const centerCard = document.getElementById('callCenterCard');
       const remoteVid = document.getElementById('remoteVideo');
-      if (remoteVid) remoteVid.style.display = (callMode === 'video') ? 'block' : 'none';
+      const localVid = document.getElementById('localVideo');
+
+      if (callerNameEl) callerNameEl.textContent = targetName;
+
+      if (avatarEl) {
+        if (targetAvatar) {
+          avatarEl.innerHTML = `<img src="${targetAvatar}" alt="${escapeHtml(targetName)}" />`;
+          avatarEl.style.background = 'transparent';
+        } else {
+          const clean = (targetName || 'Peer').trim();
+          const initials = clean.length <= 2 ? clean.toUpperCase() : clean.substring(0, 2).toUpperCase();
+          avatarEl.innerHTML = `<span>${escapeHtml(initials)}</span>`;
+          avatarEl.style.background = getAvatarColor(clean);
+        }
+      }
+
+      const callLabel = document.getElementById('callLabel');
+      if (callLabel) callLabel.textContent = label || '';
+
+      const callingRow = document.getElementById('callStateCalling');
+      const ringingRow = document.getElementById('callStateRinging');
+      const activeRow = document.getElementById('callStateActive');
+
+      if (state === 'ringing') {
+        stopCallDurationTimer();
+        if (callerStatusEl) callerStatusEl.textContent = `Incoming ${callMode === 'audio' ? 'Voice' : 'Video'} Call…`;
+        if (centerCard) {
+          centerCard.style.display = 'flex';
+          centerCard.classList.remove('in-video-call');
+        }
+        if (remoteVid) remoteVid.style.display = 'none';
+        if (localVid) localVid.style.display = 'none';
+        if (callingRow) callingRow.style.display = 'none';
+        if (ringingRow) ringingRow.style.display = 'flex';
+        if (activeRow) activeRow.style.display = 'none';
+      } else if (state === 'calling') {
+        stopCallDurationTimer();
+        if (callerStatusEl) callerStatusEl.textContent = `Calling ${callMode === 'audio' ? 'Voice' : 'Video'}…`;
+        if (centerCard) {
+          centerCard.style.display = 'flex';
+          centerCard.classList.remove('in-video-call');
+        }
+        if (remoteVid) remoteVid.style.display = 'none';
+        if (localVid) localVid.style.display = 'none';
+        if (callingRow) callingRow.style.display = 'flex';
+        if (ringingRow) ringingRow.style.display = 'none';
+        if (activeRow) activeRow.style.display = 'none';
+      } else if (state === 'active') {
+        startCallDurationTimer();
+        if (callMode === 'video') {
+          if (remoteVid) remoteVid.style.display = 'block';
+          if (localVid) localVid.style.display = 'block';
+          if (centerCard) {
+            centerCard.style.display = 'flex';
+            centerCard.classList.add('in-video-call');
+          }
+        } else {
+          if (remoteVid) remoteVid.style.display = 'none';
+          if (localVid) localVid.style.display = 'none';
+          if (centerCard) {
+            centerCard.style.display = 'flex';
+            centerCard.classList.remove('in-video-call');
+          }
+          if (callerStatusEl) callerStatusEl.textContent = 'Voice Call Active';
+        }
+        if (callingRow) callingRow.style.display = 'none';
+        if (ringingRow) ringingRow.style.display = 'none';
+        if (activeRow) activeRow.style.display = 'flex';
+      }
     }
 
     function toggleMute() {
