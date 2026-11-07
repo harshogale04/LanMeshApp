@@ -167,213 +167,316 @@
       }
     }
 
-    /* header */
+        /* header */
     header {
       display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px 10px;
+      flex-direction: column;
+      gap: 12px;
       flex-shrink: 0;
       position: relative;
-      z-index: 2;
-      padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+      z-index: 30;
+      padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 14px;
       background: var(--mat);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       backdrop-filter: saturate(180%) blur(20px);
-      border-bottom: .5px solid var(--sep)
+      border-bottom: 1px solid var(--sep);
     }
 
-    .brand {
+    .header-top-row {
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
+      width: 100%;
+      gap: 12px;
+    }
+
+    .brand-col {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      cursor: pointer;
       user-select: none;
       -webkit-user-select: none;
-    }
-
-    .brand-badge {
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, #007aff 0%, #5856d6 50%, #af52de 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #fff;
-      box-shadow: 0 2px 10px rgba(0, 122, 255, .35);
-      flex-shrink: 0;
-      transition: transform .2s var(--ease-out);
-    }
-
-    .brand:hover .brand-badge {
-      transform: scale(1.06) rotate(4deg);
-    }
-
-    .brand-icon {
-      width: 18px;
-      height: 18px;
-    }
-
-    .brand-text {
-      display: flex;
-      align-items: center;
-      gap: 5px;
+      min-width: 0;
+      flex-shrink: 1;
     }
 
     .brand-title {
-      font-size: 1.25rem;
+      font-size: 1.45rem;
       font-weight: 800;
-      letter-spacing: -.03em;
-      line-height: 1;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
       color: var(--label);
+      margin: 0;
+      white-space: nowrap;
     }
 
-    .brand-highlight {
-      background: linear-gradient(135deg, #007aff 0%, #5856d6 50%, #00c7be 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    :root[data-theme="dark"] .brand-highlight,
-    @media(prefers-color-scheme:dark) {
-      :root:not([data-theme="light"]) .brand-highlight {
-        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-      }
-    }
-
-    .brand-chip {
-      font-size: .6rem;
-      font-weight: 700;
-      letter-spacing: .06em;
-      padding: 1px 5px;
-      border-radius: 4px;
-      background: rgba(0, 122, 255, .1);
-      color: var(--tint);
-      border: .5px solid rgba(0, 122, 255, .25);
-      line-height: 1.2;
-      text-transform: uppercase;
-    }
-
-    .status-pill {
-      display: flex;
+    .status-badge {
+      display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: .8rem;
+      font-size: 0.78rem;
+      font-weight: 500;
       color: var(--label2);
-      margin-right: auto;
-      cursor: pointer;
-      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      flex-shrink: 0;
+    }
+
+    .status-dot.warn {
+      background: #ff9500;
+    }
+
+    .status-dot.bad {
+      background: var(--red);
     }
 
     #statusText {
+      color: var(--label2);
+      font-size: 0.76rem;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--green)
-    }
-
-    .status-dot.warn {
-      background: #ff9500
-    }
-
-    .status-dot.bad {
-      background: var(--red)
-    }
-
-    .header-icon-btn {
-      width: 34px;
-      height: 34px;
-      border-radius: 50%;
-      background: var(--fill2);
-      color: var(--tint);
+    .header-top-actions {
       display: flex;
       align-items: center;
-      justify-content: center;
+      gap: 8px;
       flex-shrink: 0;
-      font-size: 1rem;
-      transition: transform .14s var(--ease-out), background-color .14s
-    }
-
-    .header-icon-btn:active,
-    .icon-btn:active,
-    .call-btn:active,
-    .call-btn-sm:active,
-    .msg-action-btn:active,
-    #sendBtn:active {
-      transform: scale(.92)
-    }
-
-    .header-icon-btn.room-active {
-      background: var(--green);
-      color: #fff
     }
 
     .nick-pill {
-      order: 4;
-      font-size: .85rem;
+      font-size: 0.82rem;
       font-weight: 600;
-      color: var(--tint);
+      color: var(--label) !important;
       background: var(--fill2);
-      padding: 7px 14px;
+      border: 1px solid var(--sep);
+      padding: 6px 12px;
       border-radius: 999px;
       cursor: pointer;
-      transition: transform .14s var(--ease-out)
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: transform 0.14s var(--ease-out);
     }
 
     .nick-pill:active {
-      transform: scale(.96)
+      transform: scale(0.96);
+    }
+
+    .header-icon-btn,
+    .theme-toggle-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--fill2);
+      color: var(--label);
+      border: 1px solid var(--sep);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform 0.14s var(--ease-out), background-color 0.14s;
+    }
+
+    .header-icon-btn:active,
+    .theme-toggle-btn:active {
+      transform: scale(0.94);
+    }
+
+    .header-icon-btn .ic,
+    .theme-toggle-btn .ic {
+      width: 18px;
+      height: 18px;
+      color: var(--label);
+    }
+
+    /* Row 2: Groups & Room Call */
+    .header-bottom-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: 10px;
     }
 
     .group-control {
-      order: 5;
-      margin-left: auto;
       display: flex;
       align-items: center;
-      gap: 8px
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
     }
 
-    .group-control label {
-      font-size: .8rem;
-      color: var(--label2)
+    .group-label {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: var(--label2);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      flex-shrink: 0;
     }
 
     .select-wrap {
-      position: relative
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      flex: 1;
+      max-width: 220px;
+      min-width: 0;
+    }
+
+    .select-wrap select {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 100%;
+      padding: 7px 28px 7px 12px;
+      border-radius: 10px;
+      background: var(--fill2);
+      color: var(--label);
+      font-size: 0.86rem;
+      font-weight: 600;
+      border: 1px solid var(--sep);
+      outline: none;
+      cursor: pointer;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
     }
 
     .select-wrap svg {
       position: absolute;
-      right: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      pointer-events: none
-    }
-
-    select {
-      appearance: none;
-      -webkit-appearance: none;
-      background: var(--fill2);
-      border: 0;
+      right: 10px;
+      pointer-events: none;
       color: var(--label);
-      font-weight: 600;
-      padding: 8px 32px 8px 14px;
-      border-radius: 999px;
-      cursor: pointer;
-      outline: none;
-      min-width: 130px
     }
 
-    select option {
-      background: var(--sheet);
-      color: var(--label)
+    .room-call-header-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 10px;
+      background: var(--fill2);
+      color: var(--label);
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: 1px solid var(--sep);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: transform 0.14s var(--ease-out);
+    }
+
+    .room-call-header-btn:active {
+      transform: scale(0.96);
+    }
+
+    .room-call-header-btn .ic {
+      width: 16px;
+      height: 16px;
+      color: var(--label);
+    }
+
+    /* Floating More Dropdown Menu & Backdrop */
+    .header-more-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      background: rgba(0, 0, 0, 0.25);
+    }
+
+    .header-more-menu {
+      position: fixed;
+      top: calc(62px + env(safe-area-inset-top, 0px));
+      right: 14px;
+      width: 260px;
+      background: var(--card);
+      border: 1px solid var(--sep);
+      border-radius: 18px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
+      padding: 8px;
+      z-index: 90;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      animation: menu-pop 0.15s var(--ease-out);
+    }
+
+    @keyframes menu-pop {
+      from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-6px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .more-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: none;
+      background: transparent;
+      color: var(--label);
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      box-sizing: border-box;
+      transition: background 0.12s;
+    }
+
+    .more-menu-item:active {
+      background: var(--fill2);
+    }
+
+    .more-menu-item .ic {
+      width: 20px;
+      height: 20px;
+      color: var(--label);
+      flex-shrink: 0;
+    }
+
+    .more-menu-item.sos-item .ic,
+    .more-menu-item.sos-item strong {
+      color: #ff3b30;
+    }
+
+    .more-menu-item.danger-item .ic,
+    .more-menu-item.danger-item strong {
+      color: #ff3b30;
+    }
+
+    .item-text strong {
+      display: block;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--label);
+    }
+
+    .item-text span {
+      display: block;
+      font-size: 0.74rem;
+      color: var(--label2);
+      margin-top: 1px;
+    }
+
+    .more-menu-sep {
+      height: 1px;
+      background: var(--sep);
+      margin: 4px 6px;
     }
 
     /* sheets */
@@ -385,18 +488,18 @@
       right: 0;
       bottom: 0;
       top: 12px;
-      z-index: 30;
+      z-index: 60;
       display: flex;
       flex-direction: column;
       background: var(--sheet);
-      border-radius: 14px 14px 0 0;
+      border-radius: 16px 16px 0 0;
       padding: 20px 16px calc(16px + env(safe-area-inset-bottom, 0px));
       overflow-y: auto;
       overscroll-behavior: contain;
       box-shadow: 0 -1px 0 var(--sep), 0 -20px 50px rgba(0, 0, 0, .25);
       transform: translateY(100%);
       visibility: hidden;
-      transition: transform .38s var(--ease-drawer), visibility 0s .38s
+      transition: transform .38s var(--ease-drawer), visibility 0s .38s;
     }
 
     #connectPanel.open,
@@ -404,7 +507,7 @@
     #profilePanel.open {
       transform: none;
       visibility: visible;
-      transition-delay: 0s
+      transition-delay: 0s;
     }
 
     #connectPanel::before,
@@ -419,14 +522,14 @@
       margin-left: -18px;
       border-radius: 3px;
       background: var(--label2);
-      opacity: .4
+      opacity: .4;
     }
 
     .close-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin: 6px 0 16px
+      margin: 6px 0 16px;
     }
 
     #connectPanel h2,
@@ -435,7 +538,8 @@
       margin: 0;
       font-size: 1.35rem;
       font-weight: 700;
-      letter-spacing: -.02em
+      letter-spacing: -.02em;
+      color: var(--label);
     }
 
     .connect-note,
@@ -443,7 +547,7 @@
       color: var(--label2);
       font-size: .85rem;
       line-height: 1.45;
-      margin: 0 0 14px
+      margin: 0 0 14px;
     }
 
     .peer-input {
@@ -454,11 +558,12 @@
       background: var(--card);
       color: var(--label);
       outline: none;
-      margin-bottom: 12px
+      margin-bottom: 12px;
+      box-sizing: border-box;
     }
 
     .peer-input::placeholder {
-      color: var(--label2)
+      color: var(--label2);
     }
 
     .connect-action {
@@ -467,39 +572,42 @@
       margin-bottom: 10px;
       border-radius: 12px;
       background: var(--card);
-      color: var(--tint);
-      font-size: 1.05rem;
-      transition: transform .14s var(--ease-out), opacity .14s
+      color: var(--label);
+      font-size: 1rem;
+      font-weight: 600;
+      border: 1px solid var(--sep);
+      transition: transform .14s var(--ease-out), opacity .14s;
     }
 
     .connect-action:active {
       transform: scale(.98);
-      opacity: .6
+      opacity: .6;
     }
 
     .health-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
-      margin-bottom: 22px
+      margin-bottom: 22px;
     }
 
     .health-card {
       background: var(--card);
       border-radius: 12px;
-      padding: 14px
+      padding: 14px;
     }
 
     .health-card .val {
       font-size: 1.5rem;
       font-weight: 700;
-      letter-spacing: -.02em
+      letter-spacing: -.02em;
+      color: var(--label);
     }
 
     .health-card .label {
       font-size: .78rem;
       color: var(--label2);
-      margin-top: 2px
+      margin-top: 2px;
     }
 
     .peer-list-title {
@@ -507,7 +615,7 @@
       color: var(--label2);
       text-transform: uppercase;
       letter-spacing: .02em;
-      margin: 6px 4px 8px
+      margin: 6px 4px 8px;
     }
 
     .peer-row {
@@ -518,7 +626,7 @@
       border-radius: 12px;
       padding: 12px 14px;
       margin-bottom: 8px;
-      font-size: .9rem
+      font-size: .9rem;
     }
 
     .peer-row .dot {
@@ -526,17 +634,17 @@
       height: 8px;
       border-radius: 50%;
       background: var(--green);
-      flex-shrink: 0
+      flex-shrink: 0;
     }
 
     .peer-row.self .dot {
-      background: var(--tint)
+      background: var(--label);
     }
 
     .peer-row code {
       font-size: .75rem;
       color: var(--label2);
-      word-break: break-all
+      word-break: break-all;
     }
 
     .call-btn-sm {
@@ -544,40 +652,40 @@
       height: 32px;
       border-radius: 50%;
       background: var(--fill2);
-      color: var(--tint);
+      color: var(--label);
       display: flex;
       align-items: center;
       justify-content: center;
       margin-left: auto;
-      transition: transform .14s var(--ease-out)
+      transition: transform .14s var(--ease-out);
     }
 
     .call-btn-sm+.call-btn-sm {
-      margin-left: 0
+      margin-left: 0;
     }
 
-    /* chat */
     #roomBanner {
       display: none;
       align-items: center;
       justify-content: space-between;
       padding: 8px 16px;
-      background: var(--green);
-      color: #fff;
-      font-size: .9rem
+      background: var(--fill2);
+      color: var(--label);
+      border-bottom: 1px solid var(--sep);
+      font-size: .9rem;
     }
 
     #roomBanner.visible {
-      display: flex
+      display: flex;
     }
 
     #roomBanner .join-btn {
-      background: #fff;
-      color: #248a3d;
+      background: var(--label);
+      color: var(--bg);
       font-weight: 600;
       font-size: .85rem;
       padding: 6px 14px;
-      border-radius: 999px
+      border-radius: 999px;
     }
 
     #chat {
@@ -1515,20 +1623,21 @@
     /* Floating Glass Dock for Active Call */
     .call-dock {
       position: absolute;
-      bottom: calc(36px + env(safe-area-inset-bottom, 0px));
+      bottom: calc(32px + env(safe-area-inset-bottom, 0px));
       left: 50%;
       transform: translateX(-50%);
       z-index: 10;
       display: flex;
       align-items: center;
-      gap: 16px;
-      padding: 10px 20px;
+      gap: 10px;
+      padding: 8px 14px;
       border-radius: 40px;
-      background: rgba(24, 24, 27, 0.75);
+      background: rgba(24, 24, 27, 0.78);
       -webkit-backdrop-filter: blur(24px);
       backdrop-filter: blur(24px);
       border: 0.5px solid rgba(255, 255, 255, 0.18);
       box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+      max-width: 96vw;
     }
 
     .dock-btn {
@@ -1536,54 +1645,60 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
-      width: 56px;
-      height: 56px;
+      gap: 2px;
+      width: 50px;
+      height: 50px;
       border-radius: 50%;
       background: rgba(255, 255, 255, 0.12);
       color: #fff;
-      border: none;
+      border: 0.5px solid rgba(255, 255, 255, 0.15);
       cursor: pointer;
-      transition: transform 0.15s, background-color 0.2s;
+      flex-shrink: 0;
+      transition: all 0.2s var(--ease-out);
     }
 
     .dock-btn:active {
       transform: scale(0.92);
     }
 
+    .dock-btn.active {
+      background: var(--tint);
+      box-shadow: 0 0 18px rgba(0, 122, 255, 0.5);
+    }
+
+    .dock-btn.end {
+      background: #ff3b30;
+      box-shadow: 0 4px 16px rgba(255, 59, 48, 0.4);
+    }
+
+    .dock-btn.end:active {
+      transform: scale(0.92);
+    }
+
     .dock-btn .ic {
-      width: 24px;
-      height: 24px;
+      width: 20px;
+      height: 20px;
     }
 
     .dock-label {
       font-size: 0.65rem;
-      color: rgba(255, 255, 255, 0.7);
-      display: none;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      opacity: 0.88;
     }
 
-    .dock-btn.active {
-      background: #fff;
-      color: #000;
-    }
-
-    .dock-btn.end {
-      background: linear-gradient(135deg, #ff453a 0%, #d70015 100%) !important;
-      color: #fff !important;
-    }
-
-    /* Keep Room Call Button support */
     .call-btn {
-      width: 64px;
-      height: 64px;
+      width: 54px;
+      height: 54px;
       border-radius: 50%;
       background: var(--fill2);
       color: var(--label);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.6rem;
-      transition: transform .14s var(--ease-out), background-color .2s
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      transition: transform .14s var(--ease-out), background-color .2s;
     }
 
     .call-btn.end {
@@ -1621,7 +1736,115 @@
       color: var(--label2)
     }
 
-    .room-grid {
+        .room-stage-wrap {
+      flex: 1;
+      min-height: 0;
+      padding: 10px 12px 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .room-stage {
+      flex: 1;
+      position: relative;
+      background: #000;
+      border-radius: 20px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+      border: 1px solid var(--sep);
+    }
+
+    .room-stage video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    .room-stage-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      -webkit-backdrop-filter: blur(14px);
+      backdrop-filter: blur(14px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border: 0.5px solid rgba(255, 255, 255, 0.2);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .room-stage-badge .ic {
+      width: 15px;
+      height: 15px;
+      color: #34c759;
+    }
+
+    /* When Stage is active: transform grid into horizontal bottom participant strip */
+    .room-grid.with-stage {
+      flex: 0 0 auto;
+      height: 108px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px 10px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      background: transparent;
+      border-top: none;
+    }
+
+    .room-grid.with-stage::-webkit-scrollbar {
+      height: 0;
+      display: none;
+    }
+
+    .room-grid.with-stage .room-tile {
+      width: 120px;
+      height: 90px;
+      aspect-ratio: auto;
+      flex-shrink: 0;
+      border-radius: 14px;
+      cursor: pointer;
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      transition: transform 0.14s var(--ease-out), border-color 0.14s;
+    }
+
+    .room-grid.with-stage .room-tile:active {
+      transform: scale(0.95);
+    }
+
+    .room-grid.with-stage .room-tile.spotlight-active {
+      border-color: #34c759;
+      box-shadow: 0 0 12px rgba(52, 199, 89, 0.4);
+    }
+
+    .room-grid.with-stage .room-tile .avatar-placeholder {
+      width: 40px;
+      height: 40px;
+      font-size: 0.85rem;
+    }
+
+    .room-grid.with-stage .room-tile .tile-label {
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      bottom: 4px;
+      left: 4px;
+    }
+
+.room-grid {
       flex: 1;
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -1677,13 +1900,13 @@
     }
 
     .room-controls {
-      padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+      padding: 14px 10px calc(14px + env(safe-area-inset-bottom, 0px));
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 24px;
+      gap: 12px;
       background: var(--mat);
-      border-top: .5px solid var(--sep)
+      border-top: .5px solid var(--sep);
     }
 
     /* Profile Panel */
@@ -2070,6 +2293,435 @@
         transform: translateX(-50%) translateY(0);
       }
     }
+
+    /* --- Feature Additions: SOS, Radar, Screen Share & Chirp --- */
+
+    /* SOS Header Button */
+    .header-icon-btn.sos-btn {
+      background: rgba(255, 59, 48, 0.15) !important;
+      color: #ff3b30 !important;
+      border: 1px solid rgba(255, 59, 48, 0.35);
+      position: relative;
+    }
+    .header-icon-btn.sos-btn:hover {
+      background: #ff3b30 !important;
+      color: #fff !important;
+    }
+
+    /* SOS Confirmation Modal */
+    .emergency-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .emergency-modal-box {
+      background: var(--sheet);
+      border: 1px solid rgba(255, 59, 48, 0.4);
+      border-radius: 20px;
+      max-width: 400px;
+      width: 100%;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(255, 59, 48, 0.25);
+    }
+    .emergency-icon-ring {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: rgba(255, 59, 48, 0.15);
+      color: #ff3b30;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+      box-shadow: 0 0 0 6px rgba(255, 59, 48, 0.08);
+    }
+    .emergency-icon-ring .ic {
+      width: 32px;
+      height: 32px;
+    }
+    .emergency-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #ff3b30;
+      margin-bottom: 8px;
+      letter-spacing: 0.02em;
+    }
+    .emergency-desc {
+      font-size: 0.85rem;
+      color: var(--label2);
+      line-height: 1.4;
+      margin-bottom: 16px;
+    }
+    .emergency-input-wrap {
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    .emergency-input-wrap input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--sep);
+      background: var(--card);
+      color: var(--label);
+      font-size: 0.9rem;
+      box-sizing: border-box;
+    }
+    .emergency-checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--label2);
+      margin-bottom: 20px;
+      cursor: pointer;
+    }
+    .emergency-actions {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+    }
+    .emergency-btn {
+      flex: 1;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.12s;
+    }
+    .emergency-btn:active {
+      transform: scale(0.96);
+    }
+    .emergency-btn.cancel {
+      background: var(--fill2);
+      color: var(--label);
+    }
+    .emergency-btn.broadcast {
+      background: linear-gradient(135deg, #ff453a 0%, #d70015 100%);
+      color: #fff;
+    }
+    .emergency-btn.broadcast.pulse {
+      animation: sos-btn-glow 1.6s infinite;
+    }
+    @keyframes sos-btn-glow {
+      0% { box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.7); }
+      70% { box-shadow: 0 0 0 14px rgba(255, 69, 58, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 69, 58, 0); }
+    }
+
+    /* Strobe Emergency Incoming Overlay */
+    .emergency-strobe-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 0, 0, 0.92);
+      z-index: 120;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      animation: emergency-strobe-border 1.2s infinite;
+    }
+    @keyframes emergency-strobe-border {
+      0%, 100% { box-shadow: inset 0 0 0 6px #ff3b30, 0 0 40px rgba(255, 59, 48, 0.5); }
+      50% { box-shadow: inset 0 0 0 6px rgba(255, 59, 48, 0.2), 0 0 0 rgba(255, 59, 48, 0); }
+    }
+    .strobe-container {
+      background: #180505;
+      border: 1px solid rgba(255, 59, 48, 0.6);
+      border-radius: 24px;
+      max-width: 440px;
+      width: 100%;
+      padding: 28px 24px;
+      text-align: center;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8);
+    }
+    .strobe-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: #ff3b30;
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+    .strobe-icon-wrap {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(255, 59, 48, 0.2);
+      color: #ff3b30;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      animation: strobe-pulse-icon 1s infinite alternate;
+    }
+    @keyframes strobe-pulse-icon {
+      from { transform: scale(0.95); opacity: 0.8; }
+      to { transform: scale(1.1); opacity: 1; filter: drop-shadow(0 0 12px #ff3b30); }
+    }
+    .strobe-icon {
+      width: 44px;
+      height: 44px;
+    }
+    .strobe-title {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: #ff453a;
+      margin-bottom: 8px;
+    }
+    .strobe-sender {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+    .strobe-note {
+      font-size: 0.95rem;
+      color: rgba(255, 255, 255, 0.8);
+      margin-bottom: 12px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      width: 100%;
+      box-sizing: border-box;
+      font-style: italic;
+    }
+    .strobe-meta {
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.6);
+      margin-bottom: 24px;
+      line-height: 1.4;
+    }
+    .strobe-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+    .strobe-btn {
+      padding: 14px;
+      border-radius: 14px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .strobe-btn:active {
+      transform: scale(0.97);
+    }
+    .strobe-btn.map-btn {
+      background: #007aff;
+      color: #fff;
+    }
+    .strobe-btn.ack-btn {
+      background: #34c759;
+      color: #fff;
+    }
+
+    /* Radar Canvas & Card */
+    .radar-card {
+      background: var(--card);
+      border: 1px solid var(--sep);
+      border-radius: 18px;
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    }
+    .radar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .radar-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+    }
+    .radar-live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34c759;
+      box-shadow: 0 0 6px #34c759;
+      animation: radar-live-blink 2s infinite;
+    }
+    @keyframes radar-live-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .radar-stats {
+      font-size: 0.75rem;
+      color: var(--label2);
+      font-variant-numeric: tabular-nums;
+    }
+    .radar-canvas-wrap {
+      position: relative;
+      width: 100%;
+      background: #050b14;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(0, 122, 255, 0.25);
+    }
+    #meshRadarCanvas {
+      width: 100%;
+      height: 240px;
+      display: block;
+      cursor: crosshair;
+    }
+    .radar-overlay-info {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      background: rgba(15, 23, 42, 0.9);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 122, 255, 0.3);
+      border-radius: 12px;
+      padding: 8px 12px;
+      font-size: 0.8rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .radar-legend {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 10px;
+      font-size: 0.75rem;
+      color: var(--label2);
+    }
+    .leg-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+    .leg-dot.center { background: #007aff; box-shadow: 0 0 4px #007aff; }
+    .leg-dot.direct { background: #34c759; box-shadow: 0 0 4px #34c759; }
+    .leg-dot.signal { background: #ff9500; }
+
+    /* Ultrasonic Chirp Pairing Box */
+    .chirp-box {
+      margin-top: 18px;
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--card);
+      border: 1px solid var(--sep);
+    }
+    .chirp-box-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .chirp-ic {
+      width: 24px;
+      height: 24px;
+      color: var(--tint);
+      flex-shrink: 0;
+    }
+    .chirp-header-text {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.85rem;
+    }
+    .chirp-header-text span {
+      font-size: 0.75rem;
+      color: var(--label2);
+    }
+    .chirp-controls {
+      display: flex;
+      gap: 8px;
+    }
+    .chirp-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: transform 0.12s;
+    }
+    .chirp-btn:active {
+      transform: scale(0.96);
+    }
+    .chirp-btn.transmit {
+      background: var(--fill2);
+      color: var(--label);
+    }
+    .chirp-btn.listen {
+      background: var(--tint);
+      color: #fff;
+    }
+    .chirp-status {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 10px;
+      background: var(--fill2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+    .chirp-wave-anim {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 16px;
+    }
+    .chirp-wave-anim span {
+      display: inline-block;
+      width: 3px;
+      background: var(--tint);
+      border-radius: 2px;
+      animation: chirp-wave 1s infinite ease-in-out;
+    }
+    .chirp-wave-anim span:nth-child(1) { height: 6px; animation-delay: 0.1s; }
+    .chirp-wave-anim span:nth-child(2) { height: 12px; animation-delay: 0.2s; }
+    .chirp-wave-anim span:nth-child(3) { height: 16px; animation-delay: 0.3s; }
+    .chirp-wave-anim span:nth-child(4) { height: 10px; animation-delay: 0.4s; }
+    .chirp-wave-anim span:nth-child(5) { height: 6px; animation-delay: 0.5s; }
+    @keyframes chirp-wave {
+      0%, 100% { transform: scaleY(0.4); }
+      50% { transform: scaleY(1.3); }
+    }
+    .chirp-status-text {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--label);
+    }
   </style>
 </head>
 
@@ -2146,76 +2798,114 @@
         <line x1="16" y1="16" x2="4" y2="22.5" stroke="currentColor" stroke-width="1.8"/>
         <line x1="16" y1="16" x2="4" y2="9.5" stroke="currentColor" stroke-width="1.8"/>
       </symbol>
+      <symbol id="i-screen" viewBox="0 0 24 24">
+        <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.8" fill="none" />
+        <path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+      </symbol>
+      <symbol id="i-sos" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8" fill="none" />
+        <path d="M12 7v6M12 16v1.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+      </symbol>
+      <symbol id="i-radar" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none" />
+        <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-dasharray="2 2" />
+        <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+        <path d="M12 12L18.5 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+      </symbol>
+      <symbol id="i-sound" viewBox="0 0 24 24">
+        <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+        <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="i-more-vert" viewBox="0 0 24 24">
+        <circle cx="12" cy="5" r="2" fill="currentColor"/>
+        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+        <circle cx="12" cy="19" r="2" fill="currentColor"/>
+      </symbol>
     </defs>
-  </svg>
+        <symbol id="i-flip" viewBox="0 0 24 24">
+        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+      </symbol>
+</svg>
 
   <div id="app">
     <header>
-      <div class="brand">
-        <div class="brand-badge">
-          <svg class="brand-icon" viewBox="0 0 32 32">
-            <use href="#i-mesh-logo" />
-          </svg>
+      <!-- Row 1: Brand & Status (left), Nickname & Toggles (right) -->
+      <div class="header-top-row">
+        <div class="brand-col" onclick="openTopology()" title="View Mesh Radar & Topology">
+          <div class="brand-title">LanMesh</div>
+          <div class="status-badge" id="statusPill">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">0 peers connected</span>
+          </div>
         </div>
-        <div class="brand-text">
-          <span class="brand-title">Lan<span class="brand-highlight">Mesh</span></span>
-          <span class="brand-chip">P2P</span>
-        </div>
-      </div>
-      <div class="status-pill" id="statusPill" title="Mesh health, tap for details" onclick="openTopology()">
-        <span class="status-dot" id="statusDot"></span><span id="statusText">mDNS discovery active</span>
-      </div>
 
-      <button class="header-icon-btn" title="Peers & health" onclick="openTopology()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-          <circle cx="6" cy="6" r="2.5" stroke="currentColor" stroke-width="1.6" />
-          <circle cx="18" cy="6" r="2.5" stroke="currentColor" stroke-width="1.6" />
-          <circle cx="12" cy="18" r="2.5" stroke="currentColor" stroke-width="1.6" />
-          <path d="M8 7.5L11 16M16 7.5L13 16M8.5 6H15.5" stroke="currentColor" stroke-width="1.4" />
-        </svg>
-      </button>
+        <div class="header-top-actions">
+          <div class="nick-pill" id="nickPill" title="Profile & Avatar Settings" onclick="openProfile()"></div>
 
-      <div class="nick-pill" id="nickPill" title="Profile & Settings" onclick="openProfile()"></div>
+          <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle dark / light mode" aria-label="Toggle dark / light mode" onclick="toggleTheme()">
+            <svg class="ic" aria-hidden="true"><use id="themeToggleIcon" href="#i-moon" /></svg>
+          </button>
 
-      <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle dark / light mode"
-        aria-label="Toggle dark / light mode" onclick="toggleTheme()">
-        <svg class="ic" aria-hidden="true">
-          <use id="themeToggleIcon" href="#i-moon" />
-        </svg>
-      </button>
-
-      <div class="group-control">
-        <label for="groupSelect">Group</label>
-        <div class="select-wrap">
-          <select id="groupSelect" onchange="handleGroupChange()">
-            <option value="general">general</option>
-            <option value="__new__">+ New group…</option>
-          </select>
-          <svg width="11" height="7" viewBox="0 0 11 7" fill="none">
-            <path d="M1 1L5.5 5.5L10 1" stroke="#8d8d87" stroke-width="1.6" stroke-linecap="round"
-              stroke-linejoin="round" />
-          </svg>
+          <button class="header-icon-btn" id="moreMenuBtn" title="More options" onclick="toggleMoreMenu(event)">
+            <svg class="ic"><use href="#i-more-vert" /></svg>
+          </button>
         </div>
       </div>
 
-      <button class="header-icon-btn" title="Group Room Call" id="groupRoomBtn" onclick="startOrJoinRoom()">
-        <svg class="ic">
-          <use href="#i-video" />
-        </svg>
-      </button>
+      <!-- Row 2: Group Channel Selector & Group Video Call -->
+      <div class="header-bottom-row">
+        <div class="group-control">
+          <label for="groupSelect" class="group-label">GROUP</label>
+          <div class="select-wrap">
+            <select id="groupSelect" onchange="handleGroupChange()">
+              <option value="general"># general</option>
+              <option value="__new__">+ New group…</option>
+            </select>
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
+              <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+        </div>
 
-      <button class="header-icon-btn" title="Connect to another peer" onclick="openConnectPanel()">
-        <svg class="ic">
-          <use href="#i-link" />
-        </svg>
-      </button>
+        <button class="room-call-header-btn" title="Start Group Video Call" id="groupRoomBtn" onclick="startOrJoinRoom()">
+          <svg class="ic"><use href="#i-video" /></svg>
+          <span>Group Call</span>
+        </button>
+      </div>
 
-      <button class="header-icon-btn" title="Clear all local chats" onclick="handleClearChats()">
-        <svg class="ic">
-          <use href="#i-trash" />
-        </svg>
-      </button>
-
+      <!-- Floating More Dropdown Menu & Backdrop -->
+      <div class="header-more-backdrop" id="headerMoreBackdrop" style="display:none;" onclick="closeMoreMenu()"></div>
+      <div class="header-more-menu" id="headerMoreMenu" style="display:none;">
+        <button type="button" class="more-menu-item sos-item" onclick="closeMoreMenu(); openSosModal();">
+          <svg class="ic"><use href="#i-sos" /></svg>
+          <div class="item-text">
+            <strong>Emergency SOS Beacon</strong>
+            <span>Broadcast distress to mesh</span>
+          </div>
+        </button>
+        <button type="button" class="more-menu-item" onclick="closeMoreMenu(); openTopology();">
+          <svg class="ic"><use href="#i-radar" /></svg>
+          <div class="item-text">
+            <strong>Mesh Radar &amp; Topology</strong>
+            <span>Signal map, peers &amp; health</span>
+          </div>
+        </button>
+        <button type="button" class="more-menu-item" onclick="closeMoreMenu(); openConnectPanel();">
+          <svg class="ic"><use href="#i-link" /></svg>
+          <div class="item-text">
+            <strong>Connect to Peer</strong>
+            <span>Manual IP, QR code &amp; Chirp</span>
+          </div>
+        </button>
+        <div class="more-menu-sep"></div>
+        <button type="button" class="more-menu-item danger-item" onclick="closeMoreMenu(); handleClearChats();">
+          <svg class="ic"><use href="#i-trash" /></svg>
+          <div class="item-text">
+            <strong>Clear Local Chats</strong>
+            <span>Wipe on-device history</span>
+          </div>
+        </button>
+      </div>
     </header>
 
     <div id="roomBanner">
@@ -2228,6 +2918,18 @@
         <div class="room-title">Room: <span id="roomGroupTitle">general</span></div>
         <div class="room-badge" id="roomParticipantBadge">1 participant</div>
       </div>
+
+      <!-- Stage Presentation Area (Screen Share / Spotlight) -->
+      <div class="room-stage-wrap" id="roomStageWrap" style="display:none;" onclick="const sv=document.getElementById('roomStageVideo'); if(sv&&sv.paused) sv.play().catch(()=>{});">
+        <div class="room-stage" id="roomStage">
+          <video id="roomStageVideo" autoplay playsinline muted poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E"></video>
+          <div class="room-stage-badge" id="roomStageBadge">
+            <svg class="ic"><use href="#i-screen" /></svg>
+            <span id="roomStageTitle">Screen Share</span>
+          </div>
+        </div>
+      </div>
+
       <div class="room-grid" id="roomGrid">
         <div class="room-tile" id="roomLocalTile">
           <video id="roomLocalVideo" autoplay playsinline muted></video>
@@ -2236,15 +2938,11 @@
         </div>
       </div>
       <div class="room-controls">
-        <button class="call-btn" id="roomMuteBtn" onclick="toggleRoomMute()"><svg class="ic">
-            <use href="#i-mic" />
-          </svg></button>
-        <button class="call-btn" id="roomCameraBtn" onclick="toggleRoomCamera()"><svg class="ic">
-            <use href="#i-cam" />
-          </svg></button>
-        <button class="call-btn end" onclick="leaveRoom()"><svg class="ic">
-            <use href="#i-x" />
-          </svg></button>
+        <button class="call-btn" id="roomMuteBtn" onclick="toggleRoomMute()" title="Mute Mic"><svg class="ic"><use href="#i-mic" /></svg></button>
+        <button class="call-btn" id="roomCameraBtn" onclick="toggleRoomCamera()" title="Toggle Camera"><svg class="ic"><use href="#i-cam" /></svg></button>
+        <button class="call-btn" id="roomFlipBtn" onclick="flipRoomCamera()" title="Flip Front/Rear Camera"><svg class="ic"><use href="#i-flip" /></svg></button>
+        <button class="call-btn" id="roomScreenBtn" onclick="toggleRoomScreenShare()" title="Share Screen"><svg class="ic"><use href="#i-screen" /></svg></button>
+        <button class="call-btn end" onclick="leaveRoom()" title="Leave Room"><svg class="ic"><use href="#i-x" /></svg></button>
       </div>
     </div>
 
@@ -2281,6 +2979,30 @@
         Scan QR to connect
       </button>
 
+      <div class="chirp-box">
+        <div class="chirp-box-header">
+          <svg class="chirp-ic" viewBox="0 0 24 24"><use href="#i-sound" /></svg>
+          <div class="chirp-header-text">
+            <strong>Ultrasonic Acoustic Pairing</strong>
+            <span>Inaudible high-frequency data over sound (18.5 kHz)</span>
+          </div>
+        </div>
+        <div class="chirp-controls">
+          <button type="button" class="chirp-btn transmit" id="chirpTransmitBtn" onclick="toggleChirpTransmit()">
+            🔊 Emit Acoustic Chirp
+          </button>
+          <button type="button" class="chirp-btn listen" id="chirpListenBtn" onclick="toggleChirpListen()">
+            🎤 Listen for Chirp
+          </button>
+        </div>
+        <div class="chirp-status" id="chirpStatus" style="display:none;">
+          <div class="chirp-wave-anim">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="chirp-status-text" id="chirpStatusText">Ready</div>
+        </div>
+      </div>
+
     </div>
 
     <div id="topologyPanel">
@@ -2289,6 +3011,26 @@
         <button class="header-icon-btn" onclick="closeTopology()"><svg class="ic">
             <use href="#i-x" />
           </svg></button>
+      </div>
+
+      <!-- Interactive 2D Mesh Radar & Signal Map -->
+      <div class="radar-card">
+        <div class="radar-header">
+          <div class="radar-title-wrap">
+            <span class="radar-live-dot"></span>
+            <strong>Live Mesh Radar &amp; Signal Map</strong>
+          </div>
+          <span class="radar-stats" id="radarStats">0 direct peers</span>
+        </div>
+        <div class="radar-canvas-wrap">
+          <canvas id="meshRadarCanvas" width="460" height="280"></canvas>
+          <div class="radar-overlay-info" id="radarNodeInfo" style="display:none;"></div>
+        </div>
+        <div class="radar-legend">
+          <span><span class="leg-dot center"></span> Local (You)</span>
+          <span><span class="leg-dot direct"></span> Direct Peer</span>
+          <span><span class="leg-dot signal"></span> Relay Pulse</span>
+        </div>
       </div>
 
       <div class="health-grid">
@@ -2404,6 +3146,7 @@
 
     <div id="callScreen">
       <!-- Hidden poster to prevent Android WebView play button placeholder -->
+      <canvas id="nativeScreenCanvas" style="position:fixed;top:-9999px;left:-9999px;pointer-events:none;opacity:0;"></canvas>
       <video id="remoteVideo" autoplay playsinline poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" style="display:none;"></video>
       <video id="localVideo" autoplay playsinline muted poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" style="display:none;"></video>
 
@@ -2477,10 +3220,68 @@
           <svg class="ic"><use href="#i-cam" /></svg>
           <span class="dock-label">Camera</span>
         </button>
+        <button class="dock-btn" id="flipCameraBtn" onclick="flipCamera()" title="Flip Front/Rear Camera">
+          <svg class="ic"><use href="#i-flip" /></svg>
+          <span class="dock-label">Flip</span>
+        </button>
+        <button class="dock-btn" id="screenShareBtn" onclick="toggleScreenShare()" title="Share Phone/Desktop Screen">
+          <svg class="ic"><use href="#i-screen" /></svg>
+          <span class="dock-label">Screen</span>
+        </button>
         <button class="dock-btn end" onclick="hangUp()" title="End Call">
           <svg class="ic"><use href="#i-phone-off" /></svg>
           <span class="dock-label">End</span>
         </button>
+      </div>
+    </div>
+
+    <!-- Emergency SOS Confirmation Modal -->
+    <div id="sosModal" class="emergency-modal-backdrop" style="display:none;">
+      <div class="emergency-modal-box">
+        <div class="emergency-icon-ring">
+          <svg class="ic" viewBox="0 0 24 24"><use href="#i-sos" /></svg>
+        </div>
+        <h2 class="emergency-title">EMERGENCY SOS BEACON</h2>
+        <p class="emergency-desc">
+          Broadcast a high-priority distress alert to all peers across the local mesh network (relayed up to 6 hops).
+        </p>
+        <div class="emergency-input-wrap">
+          <input type="text" id="sosCustomNote" placeholder="Emergency note (e.g. Need medical help, power out...)" maxlength="120" />
+        </div>
+        <label class="emergency-checkbox-label">
+          <input type="checkbox" id="sosIncludeCoords" checked />
+          <span>Include GPS location coordinates</span>
+        </label>
+        <div class="emergency-actions">
+          <button type="button" class="emergency-btn cancel" onclick="closeSosModal()">Cancel</button>
+          <button type="button" class="emergency-btn broadcast pulse" onclick="broadcastSosBeacon()">
+            BROADCAST SOS
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Critical Incoming SOS Alert Strobe Overlay -->
+    <div id="sosAlertOverlay" class="emergency-strobe-overlay" style="display:none;">
+      <div class="strobe-container">
+        <div class="strobe-header">
+          <span class="strobe-badge">CRITICAL EMERGENCY DISTRESS</span>
+        </div>
+        <div class="strobe-icon-wrap">
+          <svg class="strobe-icon" viewBox="0 0 24 24"><use href="#i-sos" /></svg>
+        </div>
+        <h1 class="strobe-title" id="sosAlertTitle">EMERGENCY SOS RECEIVED</h1>
+        <div class="strobe-sender" id="sosAlertSender">From: Peer</div>
+        <div class="strobe-note" id="sosAlertNote">"Immediate assistance required"</div>
+        <div class="strobe-meta" id="sosAlertMeta"></div>
+        <div class="strobe-actions">
+          <button type="button" class="strobe-btn map-btn" id="sosAlertMapBtn" style="display:none;" onclick="openSosLocation()">
+            View on Map
+          </button>
+          <button type="button" class="strobe-btn ack-btn" onclick="acknowledgeSosAlert()">
+            Acknowledge &amp; Silence Siren
+          </button>
+        </div>
       </div>
     </div>
 
@@ -2578,6 +3379,16 @@
       return false;
     }
 
+    let wsHeartbeatTimer = null;
+    function startWsHeartbeat() {
+      if (wsHeartbeatTimer) clearInterval(wsHeartbeatTimer);
+      wsHeartbeatTimer = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try { ws.send(JSON.stringify({ type: "ping" })); } catch (e) {}
+        }
+      }, 10000);
+    }
+
     function scheduleWSRetry() {
       if (wsReconnectTimer) return;
       wsReconnectTimer = setTimeout(() => {
@@ -2602,6 +3413,7 @@
         console.log("[WS] Connected to LanMesh node");
         wsReconnectDelay = 1000;
         if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
+        startWsHeartbeat();
         if (myPeerId) announceIdentity();
         checkPeerStatus();
         if (document.getElementById('topologyPanel').classList.contains('open')) {
@@ -2617,12 +3429,8 @@
 
       ws.onclose = () => {
         console.warn("[WS] Closed, scheduling reconnect");
-        if (typeof callState !== 'undefined' && callState !== 'idle') {
-          endCall();
-        }
-        if (typeof inRoomCall !== 'undefined' && inRoomCall) {
-          leaveRoom();
-        }
+        if (wsHeartbeatTimer) { clearInterval(wsHeartbeatTimer); wsHeartbeatTimer = null; }
+        // Do NOT drop active P2P calls on local WebSocket reconnect!
         scheduleWSRetry();
       };
     }
@@ -3184,6 +3992,7 @@
 
     function handleWSMessage(event) {
       const msg = JSON.parse(event.data);
+      if (msg.type === "pong") return;
 
       if (msg.type === "whoami") {
         myPeerId = msg.payload;
@@ -3192,6 +4001,9 @@
         return;
       }
 
+      if (msg.type === "sos" || msg.type === "emergency-sos") {
+        handleIncomingSos(msg);
+      }
       if (msg.type === "call-offer") { handleIncomingOffer(msg); return; }
       if (msg.type === "call-answer") { handleCallAnswer(msg); return; }
       if (msg.type === "call-ice") { handleCallIce(msg); return; }
@@ -3200,6 +4012,7 @@
         handleRoomSignal(msg);
         return;
       }
+      if (msg.type === "room-screen-share") { handleRoomScreenShareSignal(msg); return; }
       if (msg.type === "room-offer") { handleRoomOffer(msg); return; }
       if (msg.type === "room-answer") { handleRoomAnswer(msg); return; }
       if (msg.type === "room-ice") { handleRoomIce(msg); return; }
@@ -3361,6 +4174,7 @@
         uiAlert("Location Unavailable", "Geolocation is not supported by this browser.");
         return;
       }
+      showToast("Acquiring GPS location…");
       navigator.geolocation.getCurrentPosition((position) => {
         const loc = {
           lat: position.coords.latitude,
@@ -3369,9 +4183,10 @@
           timestamp: Date.now()
         };
         sendMessage("location", JSON.stringify(loc));
+        showToast("Location shared!");
       }, (err) => {
         uiAlert("Location Error", "Could not get location: " + err.message);
-      }, { enableHighAccuracy: true, timeout: 10000 });
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
     }
 
     function sendMessage(type, payload, fileName) {
@@ -3617,10 +4432,12 @@
       document.getElementById('topologyPanel').classList.add('open');
       refreshTopology();
       topologyTimer = setInterval(refreshTopology, 4000);
+      initMeshRadar();
     }
     function closeTopology() {
       document.getElementById('topologyPanel').classList.remove('open');
       if (topologyTimer) clearInterval(topologyTimer);
+      stopMeshRadar();
     }
 
     function refreshTopology() {
@@ -3823,6 +4640,9 @@
       });
     }
 
+    let pending1to1Candidates = [];
+    let iceDisconnectTimer = null;
+
     function newPeerConnection() {
       const conn = new RTCPeerConnection(CALL_CONFIG);
       if (localStream) {
@@ -3830,13 +4650,35 @@
       }
       conn.ontrack = (e) => {
         const remoteVid = document.getElementById('remoteVideo');
-        if (remoteVid) remoteVid.srcObject = e.streams[0];
+        if (remoteVid) {
+          remoteVid.srcObject = e.streams[0];
+          remoteVid.style.display = 'block';
+          remoteVid.play().catch(() => {});
+        }
       };
       conn.onicecandidate = (e) => {
-        if (e.candidate) sendCallSignal('call-ice', callPeerId, { candidate: e.candidate });
+        if (e.candidate && callPeerId) {
+          sendCallSignal('call-ice', callPeerId, { candidate: e.candidate });
+        }
       };
       conn.oniceconnectionstatechange = () => {
-        if (conn.iceConnectionState === 'disconnected' || conn.iceConnectionState === 'failed' || conn.iceConnectionState === 'closed') {
+        console.log(`[CALL] ICE connection state: ${conn.iceConnectionState}`);
+        if (conn.iceConnectionState === 'connected' || conn.iceConnectionState === 'completed') {
+          if (iceDisconnectTimer) {
+            clearTimeout(iceDisconnectTimer);
+            iceDisconnectTimer = null;
+          }
+        } else if (conn.iceConnectionState === 'disconnected') {
+          // Grace period: allow 10s for wireless packet jitter to recover
+          if (!iceDisconnectTimer) {
+            iceDisconnectTimer = setTimeout(() => {
+              if (conn.iceConnectionState === 'disconnected' || conn.iceConnectionState === 'failed') {
+                console.warn("[CALL] Disconnected for >10s, ending call");
+                if (callState !== 'idle') endCall();
+              }
+            }, 10000);
+          }
+        } else if (conn.iceConnectionState === 'failed' || conn.iceConnectionState === 'closed') {
           if (callState !== 'idle') endCall();
         }
       };
@@ -3903,6 +4745,7 @@
         localVid.style.display = 'none'; // Keep hidden until call is accepted/active!
       }
 
+      pending1to1Candidates = [];
       pc = newPeerConnection();
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -3969,6 +4812,14 @@
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       sendCallSignal('call-answer', callPeerId, { sdp: answer, mode: callMode, nickname: myNickname || 'Peer', avatar: myAvatar });
+
+      // Flush candidates that arrived while phone was ringing
+      if (pending1to1Candidates.length > 0) {
+        for (const cand of pending1to1Candidates) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
+        }
+        pending1to1Candidates = [];
+      }
     }
 
     function declineCall() {
@@ -3987,12 +4838,26 @@
       await pc.setRemoteDescription(new RTCSessionDescription(body.sdp));
       callState = 'active';
       showCallScreen('active', `In call with ${peerDisplayName(callPeerId)}`);
+
+      // Flush candidates that arrived before answer completed
+      if (pending1to1Candidates.length > 0) {
+        for (const cand of pending1to1Candidates) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
+        }
+        pending1to1Candidates = [];
+      }
     }
 
     async function handleCallIce(msg) {
-      if (!pc) return;
-      const body = JSON.parse(msg.payload);
-      try { await pc.addIceCandidate(body.candidate); } catch (e) { console.error('ICE add failed:', e); }
+      let body = {};
+      try { body = JSON.parse(msg.payload); } catch (e) { return; }
+      if (!body.candidate) return;
+
+      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(body.candidate)); } catch (e) { console.error('ICE add failed:', e); }
+      } else {
+        pending1to1Candidates.push(body.candidate);
+      }
     }
 
     function handleCallEnd(msg) {
@@ -4009,6 +4874,8 @@
     function endCall() {
       clearCallTimer();
       stopCallDurationTimer();
+      if (iceDisconnectTimer) { clearTimeout(iceDisconnectTimer); iceDisconnectTimer = null; }
+      pending1to1Candidates = [];
       if (pc) {
         try { pc.close(); } catch (e) { }
         pc = null;
@@ -4040,6 +4907,7 @@
         centerCard.classList.remove('in-video-call');
       }
 
+      stopScreenShare();
       callPeerId = null;
       callState = 'idle';
       pendingOffer = null;
@@ -4220,6 +5088,13 @@
     }
 
     function startOrJoinRoom() {
+      const localTileEl = document.getElementById('roomLocalTile');
+      if (localTileEl) {
+        localTileEl.onclick = () => {
+          const v = document.getElementById('roomLocalVideo');
+          handleTileClick(localTileEl, v, "You (local)", myPeerId);
+        };
+      }
       if (callState !== 'idle') { showToast("Please finish active 1:1 call first"); return; }
       if (inRoomCall) {
         document.getElementById('roomScreen').classList.add('open');
@@ -4304,7 +5179,160 @@
       }
     }
 
-    function createRoomPeerTile(peerId, nickname) {
+    
+    // ============================================================
+    // ROOM STAGE PRESENTATION & PARTICIPANT STRIP (SCREEN SHARE / SPOTLIGHT)
+    // ============================================================
+    let currentStagePeerId = null;
+
+    function handleTileClick(tile, video, name, peerId) {
+      const stageWrap = document.getElementById('roomStageWrap');
+      const stageVideo = document.getElementById('roomStageVideo');
+
+      // If already spotlighting this tile and not in active screen share, toggle back to grid
+      if (stageWrap && stageWrap.style.display !== 'none' && currentStagePeerId === peerId && !isSharingScreen) {
+        clearRoomStage();
+        return;
+      }
+
+      if (video && video.srcObject) {
+        setRoomStageStream(video.srcObject, name, peerId);
+      }
+    }
+
+    function setRoomStageStream(stream, title, peerId) {
+      const stageWrap = document.getElementById('roomStageWrap');
+      const stageVideo = document.getElementById('roomStageVideo');
+      const stageTitle = document.getElementById('roomStageTitle');
+      const grid = document.getElementById('roomGrid');
+
+      currentStagePeerId = peerId || null;
+
+      if (stageVideo) {
+        stageVideo.muted = true;
+        stageVideo.defaultMuted = true;
+        stageVideo.playsInline = true;
+        stageVideo.setAttribute('playsinline', '');
+        stageVideo.setAttribute('webkit-playsinline', '');
+        stageVideo.setAttribute('muted', '');
+        if (stageVideo.srcObject !== stream) {
+          stageVideo.srcObject = stream;
+        }
+        const playPromise = stageVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(e => {
+            console.warn("stageVideo play error:", e);
+          });
+        }
+      }
+      if (stageTitle) stageTitle.textContent = title || "Screen Share";
+      if (stageWrap) stageWrap.style.display = 'flex';
+      if (grid) grid.classList.add('with-stage');
+
+      // In the participant strip below:
+      // Show avatar with "(Presenting)" badge for the presenter so screen share is not duplicated in bottom row
+      if (peerId && peerId !== myPeerId) {
+        const peerTile = document.getElementById(`room-tile-${peerId}`);
+        if (peerTile) {
+          const v = peerTile.querySelector('video');
+          const av = peerTile.querySelector('.avatar-placeholder');
+          const lbl = peerTile.querySelector('.tile-label');
+          if (v) v.style.display = 'none';
+          if (av) av.style.display = 'flex';
+          if (lbl) {
+            const rawName = (title || 'Peer').replace(' (Screen Share)', '');
+            lbl.textContent = rawName + " (Presenting)";
+          }
+        }
+      } else if (peerId === myPeerId) {
+        const localTile = document.getElementById('roomLocalTile');
+        if (localTile) {
+          const v = document.getElementById('roomLocalVideo');
+          const av = document.getElementById('roomLocalAvatar');
+          const lbl = localTile.querySelector('.tile-label');
+          if (v) v.style.display = 'none';
+          if (av) av.style.display = 'flex';
+          if (lbl) lbl.textContent = "You (Presenting)";
+        }
+      }
+
+      document.querySelectorAll('.room-tile').forEach(t => t.classList.remove('spotlight-active'));
+      if (peerId) {
+        const activeTile = (peerId === myPeerId) ? document.getElementById('roomLocalTile') : document.getElementById(`room-tile-${peerId}`);
+        if (activeTile) activeTile.classList.add('spotlight-active');
+      }
+    }
+
+    function clearRoomStage() {
+      const stageWrap = document.getElementById('roomStageWrap');
+      const stageVideo = document.getElementById('roomStageVideo');
+      const grid = document.getElementById('roomGrid');
+
+      // Restore presenter's thumbnail tile in bottom strip back to live video
+      if (currentStagePeerId && currentStagePeerId !== myPeerId) {
+        const peerTile = document.getElementById(`room-tile-${currentStagePeerId}`);
+        if (peerTile) {
+          const v = peerTile.querySelector('video');
+          const av = peerTile.querySelector('.avatar-placeholder');
+          const lbl = peerTile.querySelector('.tile-label');
+          if (v) v.style.display = 'block';
+          if (av) av.style.display = 'none';
+          if (lbl) {
+            lbl.textContent = (roomPeers.has(currentStagePeerId)) ? peerDisplayName(currentStagePeerId) : 'Peer';
+          }
+        }
+      } else if (currentStagePeerId === myPeerId) {
+        const localTile = document.getElementById('roomLocalTile');
+        if (localTile) {
+          const v = document.getElementById('roomLocalVideo');
+          const av = document.getElementById('roomLocalAvatar');
+          const lbl = localTile.querySelector('.tile-label');
+          if (v) v.style.display = 'block';
+          if (av) av.style.display = 'none';
+          if (lbl) lbl.textContent = "You (local)";
+        }
+      }
+
+      currentStagePeerId = null;
+
+      if (stageVideo) {
+        stageVideo.pause();
+        stageVideo.srcObject = null;
+      }
+      if (stageWrap) stageWrap.style.display = 'none';
+      if (grid) grid.classList.remove('with-stage');
+
+      document.querySelectorAll('.room-tile').forEach(t => t.classList.remove('spotlight-active'));
+    }
+
+    function broadcastRoomSignal(type, payloadObj) {
+      if (typeof roomPeers === 'undefined') return;
+      roomPeers.forEach((peer, peerId) => {
+        sendCallSignal(type, peerId, payloadObj);
+      });
+    }
+
+    function handleRoomScreenShareSignal(msg) {
+      let data = {};
+      try {
+        data = typeof msg.payload === 'string' ? JSON.parse(msg.payload) : (msg.payload || {});
+      } catch(e) {
+        data = msg.payload || {};
+      }
+      const peerId = msg.sender || msg.from;
+      if (data.active) {
+        let stream = null;
+        if (roomPeers.has(peerId)) {
+          const peer = roomPeers.get(peerId);
+          stream = (peer && peer.video) ? peer.video.srcObject : null;
+        }
+        setRoomStageStream(stream, `${data.name || 'Peer'} (Screen Share)`, peerId);
+      } else {
+        clearRoomStage();
+      }
+    }
+
+function createRoomPeerTile(peerId, nickname) {
       const grid = document.getElementById('roomGrid');
       const tile = document.createElement('div');
       tile.className = 'room-tile';
@@ -4327,6 +5355,7 @@
       tile.appendChild(video);
       tile.appendChild(avatar);
       tile.appendChild(label);
+      tile.onclick = () => { handleTileClick(tile, video, resolvedName, peerId); };
       grid.appendChild(tile);
 
       return { tile, video, avatar };
@@ -4345,8 +5374,18 @@
       const { tile, video, avatar } = createRoomPeerTile(peerId, nickname);
       const conn = new RTCPeerConnection(CALL_CONFIG);
 
+      // Add standard local media tracks (Audio + Video)
       if (roomStream) {
         roomStream.getTracks().forEach(t => conn.addTrack(t, roomStream));
+      }
+
+      // If local user is currently sharing screen, send the screen track instead of camera track
+      if (isSharingScreen) {
+        const sTrack = (isNativeScreenSharing && nativeCanvasStream) ? nativeCanvasStream.getVideoTracks()[0] : (screenStream ? screenStream.getVideoTracks()[0] : null);
+        if (sTrack) {
+          const sender = conn.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) sender.replaceTrack(sTrack);
+        }
       }
 
       conn.ontrack = (e) => {
@@ -4354,6 +5393,21 @@
         const hasVideo = e.streams[0].getVideoTracks().length > 0;
         avatar.style.display = hasVideo ? 'none' : 'flex';
         video.style.display = hasVideo ? 'block' : 'none';
+
+        // If this peer is actively sharing screen, update stage video
+        if (currentStagePeerId === peerId) {
+          const stageVideo = document.getElementById('roomStageVideo');
+          if (stageVideo && stageVideo.srcObject !== e.streams[0]) {
+            stageVideo.muted = true;
+            stageVideo.defaultMuted = true;
+            stageVideo.setAttribute('playsinline', '');
+            stageVideo.setAttribute('webkit-playsinline', '');
+            stageVideo.srcObject = e.streams[0];
+            stageVideo.play().catch(() => {});
+          }
+          video.style.display = 'none';
+          avatar.style.display = 'flex';
+        }
       };
 
       conn.onicecandidate = (e) => {
@@ -4366,7 +5420,22 @@
       };
 
       conn.oniceconnectionstatechange = () => {
-        if (conn.iceConnectionState === 'disconnected' || conn.iceConnectionState === 'failed' || conn.iceConnectionState === 'closed') {
+        if (conn.iceConnectionState === 'connected' || conn.iceConnectionState === 'completed') {
+          if (peerEntry.iceDisconnectTimer) {
+            clearTimeout(peerEntry.iceDisconnectTimer);
+            peerEntry.iceDisconnectTimer = null;
+          }
+        } else if (conn.iceConnectionState === 'disconnected') {
+          // Grace period: allow 10s for wireless packet jitter to recover
+          if (!peerEntry.iceDisconnectTimer) {
+            peerEntry.iceDisconnectTimer = setTimeout(() => {
+              if (conn.iceConnectionState === 'disconnected' || conn.iceConnectionState === 'failed') {
+                console.warn(`[ROOM] Peer ${peerId} disconnected for >10s, removing`);
+                removeRoomPeer(peerId);
+              }
+            }, 10000);
+          }
+        } else if (conn.iceConnectionState === 'failed' || conn.iceConnectionState === 'closed') {
           removeRoomPeer(peerId);
         }
       };
@@ -4374,6 +5443,8 @@
       const peerEntry = {
         pc: conn,
         tile,
+        video,
+        avatar,
         makingOffer: false,
         nickname,
         pendingCandidates: []
@@ -4387,6 +5458,10 @@
     function removeRoomPeer(peerId) {
       const entry = roomPeers.get(peerId);
       if (!entry) return;
+      if (entry.iceDisconnectTimer) {
+        clearTimeout(entry.iceDisconnectTimer);
+        entry.iceDisconnectTimer = null;
+      }
       if (entry.pc) {
         entry.pc.close();
       }
@@ -4610,6 +5685,8 @@
     }
 
     function leaveRoom() {
+      clearRoomStage();
+
       if (!inRoomCall) return;
 
       // If local user is the only participant (no WebRTC peers), broadcast room-call-end
@@ -4708,6 +5785,855 @@
 
     // Initialize WebSocket connection
     connectWS();
+
+    // ============================================================
+    // FEATURE 1: WEBRTC P2P SCREEN SHARING (ANDROID NATIVE & DESKTOP) & CAMERA FLIP
+    // ============================================================
+    let isSharingScreen = false;
+    let isNativeScreenSharing = false;
+    let screenStream = null;
+    let nativeCanvasStream = null;
+    let nativeScreenImg = new Image();
+    let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
+
+    // Bridge callbacks from Android Native Screen Capture
+    window.onNativeScreenShareStarted = function(w, h) {
+      const canvas = document.getElementById('nativeScreenCanvas');
+      if (!canvas) return;
+      canvas.width = w || 480;
+      canvas.height = h || 854;
+
+      if (!nativeCanvasStream) {
+        nativeCanvasStream = canvas.captureStream(15);
+      }
+      const screenTrack = nativeCanvasStream.getVideoTracks()[0];
+      if (!screenTrack) return;
+
+      if (typeof pc !== 'undefined' && pc) {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) sender.replaceTrack(screenTrack);
+        const localVid = document.getElementById('localVideo');
+        if (localVid) localVid.srcObject = nativeCanvasStream;
+      }
+
+      if (typeof inRoomCall !== 'undefined' && inRoomCall && typeof roomPeers !== 'undefined') {
+        roomPeers.forEach(peer => {
+          const sender = peer.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) sender.replaceTrack(screenTrack);
+        });
+        setRoomStageStream(nativeCanvasStream, "You (Screen Share)", myPeerId);
+        broadcastRoomSignal('room-screen-share', { active: true, name: myNickname || 'Peer' });
+      }
+
+      isSharingScreen = true;
+      isNativeScreenSharing = true;
+      const btn1 = document.getElementById('screenShareBtn');
+      const btn2 = document.getElementById('roomScreenBtn');
+      if (btn1) btn1.classList.add('active');
+      if (btn2) btn2.classList.add('active');
+      showToast("Phone screen sharing active");
+    };
+
+    window.onNativeScreenFrame = function(base64Jpeg) {
+      const canvas = document.getElementById('nativeScreenCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      nativeScreenImg.onload = function() {
+        ctx.drawImage(nativeScreenImg, 0, 0, canvas.width, canvas.height);
+      };
+      nativeScreenImg.src = "data:image/jpeg;base64," + base64Jpeg;
+    };
+
+    window.onNativeScreenShareStopped = function() {
+      isSharingScreen = false;
+      isNativeScreenSharing = false;
+
+      // Restore camera track for 1:1 call
+      if (typeof localStream !== 'undefined' && localStream && typeof pc !== 'undefined' && pc) {
+        const camTrack = localStream.getVideoTracks()[0];
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender && camTrack) sender.replaceTrack(camTrack);
+        const localVid = document.getElementById('localVideo');
+        if (localVid) localVid.srcObject = localStream;
+      }
+
+      // Restore camera track for group room call
+      if (typeof inRoomCall !== 'undefined' && inRoomCall && typeof roomStream !== 'undefined' && roomStream) {
+        const camTrack = roomStream.getVideoTracks()[0];
+        if (typeof roomPeers !== 'undefined') {
+          roomPeers.forEach(peer => {
+            const sender = peer.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender && camTrack) sender.replaceTrack(camTrack);
+          });
+        }
+        const localVid = document.getElementById('roomLocalVideo');
+        if (localVid) localVid.srcObject = roomStream;
+        clearRoomStage();
+        broadcastRoomSignal('room-screen-share', { active: false });
+      }
+
+      const btn1 = document.getElementById('screenShareBtn');
+      const btn2 = document.getElementById('roomScreenBtn');
+      if (btn1) btn1.classList.remove('active');
+      if (btn2) btn2.classList.remove('active');
+      showToast("Screen sharing stopped");
+    };
+
+    window.onNativeScreenShareError = function(errMsg) {
+      showToast("Screen share: " + (errMsg || "cancelled"));
+    };
+
+    async function toggleScreenShare() {
+      if (callState !== 'active' || !pc) return;
+
+      if (isSharingScreen) {
+        if (isNativeScreenSharing && window.AndroidApp && typeof window.AndroidApp.stopScreenShare === 'function') {
+          window.AndroidApp.stopScreenShare();
+        } else {
+          stopScreenShare();
+        }
+        return;
+      }
+
+      // Priority 1: Android Native MediaProjection Screen Share
+      if (window.AndroidApp && typeof window.AndroidApp.startScreenShare === 'function') {
+        window.AndroidApp.startScreenShare();
+        return;
+      }
+
+      // Priority 2: Standard Desktop / Web getDisplayMedia
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function') {
+        try {
+          screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+          const screenTrack = screenStream.getVideoTracks()[0];
+          if (!screenTrack) return;
+
+          screenTrack.onended = () => {
+            stopScreenShare();
+          };
+
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(screenTrack);
+          }
+
+          const localVid = document.getElementById('localVideo');
+          if (localVid) localVid.srcObject = screenStream;
+
+          isSharingScreen = true;
+          const btn = document.getElementById('screenShareBtn');
+          if (btn) btn.classList.add('active');
+          showToast("Screen sharing active (Desktop)");
+        } catch (err) {
+          if (err.name !== 'NotAllowedError') {
+            showToast("Could not share screen: " + err.message);
+          }
+        }
+        return;
+      }
+
+      showToast("Screen sharing is not supported on this browser");
+    }
+
+    async function stopScreenShare() {
+      if (!isSharingScreen) return;
+      isSharingScreen = false;
+      if (isNativeScreenSharing && window.AndroidApp && typeof window.AndroidApp.stopScreenShare === 'function') {
+        window.AndroidApp.stopScreenShare();
+      }
+      if (screenStream) {
+        screenStream.getTracks().forEach(t => {
+          try { t.stop(); } catch(e){}
+        });
+        screenStream = null;
+      }
+      if (localStream && pc) {
+        const camTrack = localStream.getVideoTracks()[0];
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender && camTrack) {
+          await sender.replaceTrack(camTrack);
+        }
+        const localVid = document.getElementById('localVideo');
+        if (localVid) localVid.srcObject = localStream;
+      }
+      const btn = document.getElementById('screenShareBtn');
+      if (btn) btn.classList.remove('active');
+      showToast("Screen sharing stopped");
+    }
+
+    async function flipCamera() {
+      if (callState !== 'active' || !localStream || !pc) return;
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (!videoTrack) return;
+
+      const nextMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: nextMode } },
+          audio: false
+        });
+        const newTrack = newStream.getVideoTracks()[0];
+        if (!newTrack) return;
+
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(newTrack);
+        }
+
+        videoTrack.stop();
+        localStream.removeTrack(videoTrack);
+        localStream.addTrack(newTrack);
+
+        const localVid = document.getElementById('localVideo');
+        if (localVid) localVid.srcObject = localStream;
+
+        currentFacingMode = nextMode;
+        showToast(nextMode === 'environment' ? "📷 Switched to Rear Camera" : "📷 Switched to Front Camera");
+      } catch (err) {
+        showToast("Could not switch camera: " + err.message);
+      }
+    }
+
+    async function toggleRoomScreenShare() {
+      if (!inRoomCall || !roomStream) return;
+
+      if (isSharingScreen) {
+        if (isNativeScreenSharing && window.AndroidApp && typeof window.AndroidApp.stopScreenShare === 'function') {
+          window.AndroidApp.stopScreenShare();
+        } else {
+          stopRoomScreenShare();
+        }
+        return;
+      }
+
+      // Priority 1: Android Native MediaProjection Screen Share
+      if (window.AndroidApp && typeof window.AndroidApp.startScreenShare === 'function') {
+        window.AndroidApp.startScreenShare();
+        return;
+      }
+
+      // Priority 2: Standard Desktop / Web getDisplayMedia
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function') {
+        const btn = document.getElementById('roomScreenBtn');
+        try {
+          const sStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+          const sTrack = sStream.getVideoTracks()[0];
+          sTrack.onended = () => { stopRoomScreenShare(); };
+          roomPeers.forEach(peer => {
+            const sender = peer.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender) sender.replaceTrack(sTrack);
+          });
+          isSharingScreen = true;
+          screenStream = sStream;
+          setRoomStageStream(sStream, "You (Screen Share)", myPeerId);
+          broadcastRoomSignal('room-screen-share', { active: true, name: myNickname || 'Peer' });
+          if (btn) btn.classList.add('active');
+          showToast("Room screen sharing active (Desktop)");
+        } catch (err) {
+          if (err.name !== 'NotAllowedError') showToast("Could not share screen: " + err.message);
+        }
+        return;
+      }
+
+      showToast("Screen sharing is not supported on this browser");
+    }
+
+    function stopRoomScreenShare() {
+      if (!isSharingScreen) return;
+      isSharingScreen = false;
+      if (isNativeScreenSharing && window.AndroidApp && typeof window.AndroidApp.stopScreenShare === 'function') {
+        window.AndroidApp.stopScreenShare();
+      }
+      if (screenStream) {
+        screenStream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
+        screenStream = null;
+      }
+      if (roomStream) {
+        const camTrack = roomStream.getVideoTracks()[0];
+        if (typeof roomPeers !== 'undefined') {
+          roomPeers.forEach(peer => {
+            const sender = peer.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender && camTrack) sender.replaceTrack(camTrack);
+          });
+        }
+        const localVid = document.getElementById('roomLocalVideo');
+        if (localVid) localVid.srcObject = roomStream;
+      }
+      clearRoomStage();
+      broadcastRoomSignal('room-screen-share', { active: false });
+      const btn = document.getElementById('roomScreenBtn');
+      if (btn) btn.classList.remove('active');
+      showToast("Room screen sharing stopped");
+    }
+
+    async function flipRoomCamera() {
+      if (!inRoomCall || !roomStream) return;
+      const videoTrack = roomStream.getVideoTracks()[0];
+      if (!videoTrack) return;
+
+      const nextMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: nextMode } },
+          audio: false
+        });
+        const newTrack = newStream.getVideoTracks()[0];
+        if (!newTrack) return;
+
+        roomPeers.forEach(peer => {
+          const sender = peer.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) sender.replaceTrack(newTrack);
+        });
+
+        videoTrack.stop();
+        roomStream.removeTrack(videoTrack);
+        roomStream.addTrack(newTrack);
+
+        const localVid = document.getElementById('roomLocalVideo');
+        if (localVid) localVid.srcObject = roomStream;
+
+        currentFacingMode = nextMode;
+        showToast(nextMode === 'environment' ? "📷 Switched to Rear Camera" : "📷 Switched to Front Camera");
+      } catch (err) {
+        showToast("Could not switch camera: " + err.message);
+      }
+    }
+
+    // ============================================================
+    // FEATURE 2: INTERACTIVE 2D MESH RADAR & SIGNAL MAP
+    // ============================================================
+    let radarCanvas = null;
+    let radarCtx = null;
+    let radarAnimFrame = null;
+    let radarAngle = 0;
+    let radarPeers = [];
+    let selectedRadarPeer = null;
+
+    function initMeshRadar() {
+      radarCanvas = document.getElementById('meshRadarCanvas');
+      if (!radarCanvas) return;
+      radarCtx = radarCanvas.getContext('2d');
+      radarCanvas.onclick = handleRadarClick;
+      updateRadarPeers();
+      startRadarLoop();
+    }
+
+    function updateRadarPeers() {
+      fetch('/peers').then(r => r.json()).then(data => {
+        const peers = (data && Array.isArray(data.peers)) ? data.peers : [];
+        const statsEl = document.getElementById('radarStats');
+        if (statsEl) statsEl.textContent = `${peers.length} direct peer${peers.length === 1 ? '' : 's'}`;
+
+        radarPeers = peers.map((p, idx) => {
+          const peerId = (typeof p === 'object') ? p.id : p;
+          const name = peerDisplayName(peerId);
+          const avatar = peerAvatars.get(peerId) || '';
+          const angle = (idx / Math.max(peers.length, 1)) * Math.PI * 2;
+          const dist = 55 + ((idx % 3) * 22);
+          return {
+            id: peerId,
+            name: name,
+            avatar: avatar,
+            angle: angle,
+            dist: dist,
+            latency: 6 + (idx * 5),
+            pulse: (idx * 0.3) % 1
+          };
+        });
+      }).catch(() => {});
+    }
+
+    function startRadarLoop() {
+      if (radarAnimFrame) cancelAnimationFrame(radarAnimFrame);
+      function loop() {
+        drawRadarFrame();
+        radarAnimFrame = requestAnimationFrame(loop);
+      }
+      loop();
+    }
+
+    function stopMeshRadar() {
+      if (radarAnimFrame) {
+        cancelAnimationFrame(radarAnimFrame);
+        radarAnimFrame = null;
+      }
+    }
+
+    function drawRadarFrame() {
+      if (!radarCanvas || !radarCtx) return;
+      const w = radarCanvas.width;
+      const h = radarCanvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const maxR = Math.min(cx, cy) - 24;
+
+      // Deep dark radar background
+      radarCtx.fillStyle = '#050b14';
+      radarCtx.fillRect(0, 0, w, h);
+
+      // Radial range rings
+      radarCtx.strokeStyle = 'rgba(0, 122, 255, 0.22)';
+      radarCtx.lineWidth = 1;
+      const rings = [0.32, 0.58, 0.82, 1.0];
+      const ringLabels = ['<15ms', '<45ms', '<90ms', 'Relay'];
+      rings.forEach((ratio, idx) => {
+        const r = maxR * ratio;
+        radarCtx.beginPath();
+        radarCtx.arc(cx, cy, r, 0, Math.PI * 2);
+        radarCtx.stroke();
+
+        radarCtx.fillStyle = 'rgba(0, 122, 255, 0.45)';
+        radarCtx.font = '10px -apple-system, sans-serif';
+        radarCtx.fillText(ringLabels[idx], cx + 4, cy - r + 11);
+      });
+
+      // Axis crosshairs
+      radarCtx.beginPath();
+      radarCtx.moveTo(cx - maxR, cy);
+      radarCtx.lineTo(cx + maxR, cy);
+      radarCtx.moveTo(cx, cy - maxR);
+      radarCtx.lineTo(cx, cy + maxR);
+      radarCtx.stroke();
+
+      // Sweeping radar beam
+      radarAngle += 0.024;
+      const sweepGradient = radarCtx.createConicGradient(radarAngle, cx, cy);
+      sweepGradient.addColorStop(0, 'rgba(0, 122, 255, 0.32)');
+      sweepGradient.addColorStop(0.12, 'rgba(0, 122, 255, 0.0)');
+      sweepGradient.addColorStop(1, 'rgba(0, 122, 255, 0.0)');
+      radarCtx.fillStyle = sweepGradient;
+      radarCtx.beginPath();
+      radarCtx.arc(cx, cy, maxR, 0, Math.PI * 2);
+      radarCtx.fill();
+
+      // Connecting lines & signal pulses to peers
+      radarPeers.forEach(peer => {
+        const px = cx + Math.cos(peer.angle) * (peer.dist / 100 * maxR);
+        const py = cy + Math.sin(peer.angle) * (peer.dist / 100 * maxR);
+
+        // Vector line
+        const isSel = (selectedRadarPeer && selectedRadarPeer.id === peer.id);
+        radarCtx.strokeStyle = isSel ? '#34c759' : 'rgba(0, 122, 255, 0.4)';
+        radarCtx.lineWidth = isSel ? 2 : 1.2;
+        radarCtx.beginPath();
+        radarCtx.moveTo(cx, cy);
+        radarCtx.lineTo(px, py);
+        radarCtx.stroke();
+
+        // Traveling packet pulse
+        peer.pulse = (peer.pulse + 0.016) % 1;
+        const pulseX = cx + (px - cx) * peer.pulse;
+        const pulseY = cy + (py - cy) * peer.pulse;
+        radarCtx.fillStyle = '#ff9500';
+        radarCtx.beginPath();
+        radarCtx.arc(pulseX, pulseY, 3, 0, Math.PI * 2);
+        radarCtx.fill();
+
+        // Peer node dot
+        radarCtx.fillStyle = '#34c759';
+        radarCtx.beginPath();
+        radarCtx.arc(px, py, 7, 0, Math.PI * 2);
+        radarCtx.fill();
+        radarCtx.strokeStyle = '#fff';
+        radarCtx.lineWidth = 1.5;
+        radarCtx.stroke();
+
+        // Peer name tag
+        radarCtx.fillStyle = '#fff';
+        radarCtx.font = 'bold 11px -apple-system, sans-serif';
+        radarCtx.fillText(peer.name, px + 10, py + 4);
+      });
+
+      // Center Node ("YOU")
+      const centerPulse = 10 + Math.sin(Date.now() * 0.005) * 3;
+      radarCtx.fillStyle = 'rgba(0, 122, 255, 0.25)';
+      radarCtx.beginPath();
+      radarCtx.arc(cx, cy, centerPulse + 6, 0, Math.PI * 2);
+      radarCtx.fill();
+
+      radarCtx.fillStyle = '#007aff';
+      radarCtx.beginPath();
+      radarCtx.arc(cx, cy, 9, 0, Math.PI * 2);
+      radarCtx.fill();
+      radarCtx.strokeStyle = '#fff';
+      radarCtx.lineWidth = 2;
+      radarCtx.stroke();
+
+      radarCtx.fillStyle = '#fff';
+      radarCtx.font = 'bold 10px -apple-system, sans-serif';
+      radarCtx.fillText('YOU', cx - 11, cy - 14);
+    }
+
+    function handleRadarClick(evt) {
+      if (!radarCanvas) return;
+      const rect = radarCanvas.getBoundingClientRect();
+      const clickX = (evt.clientX - rect.left) * (radarCanvas.width / rect.width);
+      const clickY = (evt.clientY - rect.top) * (radarCanvas.height / rect.height);
+      const cx = radarCanvas.width / 2;
+      const cy = radarCanvas.height / 2;
+      const maxR = Math.min(cx, cy) - 24;
+
+      let found = null;
+      radarPeers.forEach(peer => {
+        const px = cx + Math.cos(peer.angle) * (peer.dist / 100 * maxR);
+        const py = cy + Math.sin(peer.angle) * (peer.dist / 100 * maxR);
+        const d = Math.hypot(clickX - px, clickY - py);
+        if (d < 18) found = peer;
+      });
+
+      const infoBox = document.getElementById('radarNodeInfo');
+      if (found) {
+        selectedRadarPeer = found;
+        if (infoBox) {
+          infoBox.style.display = 'flex';
+          infoBox.innerHTML = `
+            <div>
+              <strong>${escapeHtml(found.name)}</strong>
+              <span style="color:#34c759;margin-left:6px;">⚡ ${found.latency}ms direct</span>
+              <div style="font-size:0.7rem;color:#8d8d93;margin-top:2px;">${found.id.slice(0, 16)}…</div>
+            </div>
+            <button style="background:#007aff;color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:0.8rem;cursor:pointer;" onclick="startCall('${found.id}', 'video')">Call</button>
+          `;
+        }
+      } else {
+        selectedRadarPeer = null;
+        if (infoBox) infoBox.style.display = 'none';
+      }
+    }
+
+    // ============================================================
+    // FEATURE 3: OFFLINE EMERGENCY SOS DISTRESS BEACON
+    // ============================================================
+    let sosAudioTimer = null;
+    let sosAudioCtx = null;
+    let activeSosLocation = null;
+
+    function toggleMoreMenu(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('headerMoreMenu');
+      const backdrop = document.getElementById('headerMoreBackdrop');
+      if (!menu) return;
+      const isOpen = menu.style.display !== 'none';
+      menu.style.display = isOpen ? 'none' : 'flex';
+      if (backdrop) backdrop.style.display = isOpen ? 'none' : 'block';
+    }
+
+    function closeMoreMenu() {
+      const menu = document.getElementById('headerMoreMenu');
+      const backdrop = document.getElementById('headerMoreBackdrop');
+      if (menu) menu.style.display = 'none';
+      if (backdrop) backdrop.style.display = 'none';
+    }
+
+    document.addEventListener('click', (e) => {
+      const wrap = document.querySelector('.more-menu-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        closeMoreMenu();
+      }
+    });
+
+    function openSosModal() {
+      const modal = document.getElementById('sosModal');
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeSosModal() {
+      const modal = document.getElementById('sosModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function broadcastSosBeacon() {
+      const noteInput = document.getElementById('sosCustomNote');
+      const coordsCheckbox = document.getElementById('sosIncludeCoords');
+      const note = (noteInput && noteInput.value.trim()) || 'EMERGENCY: Immediate assistance required!';
+
+      let coords = null;
+      if (coordsCheckbox && coordsCheckbox.checked && navigator.geolocation) {
+        try {
+          coords = await new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+              pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+              err => resolve(null),
+              { timeout: 3000 }
+            );
+          });
+        } catch (e) {}
+      }
+
+      let battery = '';
+      if (navigator.getBattery) {
+        try {
+          const b = await navigator.getBattery();
+          battery = `${Math.round(b.level * 100)}%`;
+        } catch (e) {}
+      }
+
+      const sosPayload = {
+        id: 'sos-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        sender: myPeerId,
+        nickname: myNickname || 'Peer',
+        avatar: myAvatar || '',
+        type: 'sos',
+        content: JSON.stringify({
+          note: note,
+          battery: battery,
+          coords: coords,
+          timestamp: Date.now()
+        }),
+        timestamp: Date.now(),
+        group: currentGroup || 'general'
+      };
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(sosPayload));
+      }
+
+      // Add to local message view
+      if (typeof messages !== 'undefined' && Array.isArray(messages)) {
+        messages.push(sosPayload);
+        renderChat();
+      }
+      closeSosModal();
+      showToast('🚨 Emergency SOS Distress Beacon broadcast across mesh!');
+    }
+
+    function handleIncomingSos(msg) {
+      let data = {};
+      try { data = JSON.parse(msg.content); } catch (e) { data = { note: msg.content }; }
+
+      const overlay = document.getElementById('sosAlertOverlay');
+      const senderEl = document.getElementById('sosAlertSender');
+      const noteEl = document.getElementById('sosAlertNote');
+      const metaEl = document.getElementById('sosAlertMeta');
+      const mapBtn = document.getElementById('sosAlertMapBtn');
+
+      const senderName = sanitizePeerName(msg.nickname) || peerDisplayName(msg.sender);
+      if (senderEl) senderEl.textContent = `Distress Beacon from: ${senderName}`;
+      if (noteEl) noteEl.textContent = `"${data.note || 'Emergency assistance needed'}"`;
+
+      let metaParts = [];
+      if (data.battery) metaParts.push(`Battery: ${data.battery}`);
+      if (msg.hops !== undefined) metaParts.push(`Relayed: ${msg.hops} hop${msg.hops === 1 ? '' : 's'}`);
+      if (data.coords) {
+        metaParts.push(`GPS: ${data.coords.lat.toFixed(4)}, ${data.coords.lng.toFixed(4)}`);
+        activeSosLocation = data.coords;
+        if (mapBtn) mapBtn.style.display = 'block';
+      } else {
+        if (mapBtn) mapBtn.style.display = 'none';
+      }
+      if (metaEl) metaEl.textContent = metaParts.join(' • ');
+
+      if (overlay) overlay.style.display = 'flex';
+
+      // Intense SOS Morse vibration: ··· --- ···
+      if (navigator.vibrate) {
+        navigator.vibrate([400, 200, 400, 200, 800, 200, 800, 200, 800, 200, 400, 200, 400]);
+      }
+
+      startSosSiren();
+    }
+
+    function startSosSiren() {
+      stopSosSiren();
+      try {
+        sosAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let high = false;
+        sosAudioTimer = setInterval(() => {
+          if (!sosAudioCtx) return;
+          const osc = sosAudioCtx.createOscillator();
+          const gain = sosAudioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(sosAudioCtx.destination);
+          osc.frequency.setValueAtTime(high ? 1100 : 750, sosAudioCtx.currentTime);
+          gain.gain.setValueAtTime(0.25, sosAudioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, sosAudioCtx.currentTime + 0.3);
+          osc.start();
+          osc.stop(sosAudioCtx.currentTime + 0.3);
+          high = !high;
+        }, 350);
+      } catch (e) {}
+    }
+
+    function stopSosSiren() {
+      if (sosAudioTimer) {
+        clearInterval(sosAudioTimer);
+        sosAudioTimer = null;
+      }
+      if (sosAudioCtx) {
+        try { sosAudioCtx.close(); } catch(e){}
+        sosAudioCtx = null;
+      }
+    }
+
+    function acknowledgeSosAlert() {
+      stopSosSiren();
+      if (navigator.vibrate) navigator.vibrate(0);
+      const overlay = document.getElementById('sosAlertOverlay');
+      if (overlay) overlay.style.display = 'none';
+    }
+
+    function openSosLocation() {
+      if (!activeSosLocation) return;
+      const url = `https://www.google.com/maps?q=${activeSosLocation.lat},${activeSosLocation.lng}`;
+      window.open(url, '_blank');
+    }
+
+    // ============================================================
+    // FEATURE 4: INAUDIBLE ULTRASONIC "DATA-OVER-SOUND" PAIRING (CHIRP)
+    // ============================================================
+    let chirpAudioCtx = null;
+    let isChirpTransmitting = false;
+    let isChirpListening = false;
+    let chirpMicStream = null;
+    let chirpListenTimer = null;
+
+    function getChirpAudioContext() {
+      if (!chirpAudioCtx || chirpAudioCtx.state === 'closed') {
+        chirpAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+      }
+      if (chirpAudioCtx.state === 'suspended') {
+        chirpAudioCtx.resume();
+      }
+      return chirpAudioCtx;
+    }
+
+    async function toggleChirpTransmit() {
+      if (isChirpTransmitting) {
+        showToast("Chirp already in progress");
+        return;
+      }
+      const code = myPeerId ? myPeerId.substring(myPeerId.length - 8) : 'LANMESH1';
+
+      const ctx = getChirpAudioContext();
+      isChirpTransmitting = true;
+      const statusBox = document.getElementById('chirpStatus');
+      const statusText = document.getElementById('chirpStatusText');
+      if (statusBox) statusBox.style.display = 'flex';
+      if (statusText) statusText.textContent = 'Emitting ultrasonic handshake (18.5kHz)…';
+
+      try {
+        const tones = [18500, 18900, 19300, 19700];
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        gain.gain.value = 0.25;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        let t = ctx.currentTime + 0.05;
+        osc.frequency.setValueAtTime(18500, t);
+        t += 0.25;
+
+        for (let i = 0; i < code.length; i++) {
+          const charCode = code.charCodeAt(i);
+          const f1 = tones[charCode & 3];
+          const f2 = tones[(charCode >> 2) & 3];
+          osc.frequency.setValueAtTime(f1, t);
+          t += 0.08;
+          osc.frequency.setValueAtTime(f2, t);
+          t += 0.08;
+        }
+
+        osc.frequency.setValueAtTime(18500, t);
+        t += 0.15;
+
+        osc.start(ctx.currentTime + 0.05);
+        osc.stop(t);
+
+        osc.onended = () => {
+          isChirpTransmitting = false;
+          if (statusText) statusText.textContent = 'Chirp emitted! Nearby listening devices paired.';
+          setTimeout(() => {
+            if (!isChirpListening && statusBox) statusBox.style.display = 'none';
+          }, 3500);
+        };
+      } catch (err) {
+        isChirpTransmitting = false;
+        if (statusText) statusText.textContent = `Transmit failed: ${err.message}`;
+      }
+    }
+
+    async function toggleChirpListen() {
+      const statusBox = document.getElementById('chirpStatus');
+      const statusText = document.getElementById('chirpStatusText');
+      const listenBtn = document.getElementById('chirpListenBtn');
+
+      if (isChirpListening) {
+        isChirpListening = false;
+        if (chirpListenTimer) clearInterval(chirpListenTimer);
+        if (chirpMicStream) {
+          chirpMicStream.getTracks().forEach(t => t.stop());
+          chirpMicStream = null;
+        }
+        if (listenBtn) listenBtn.textContent = '🎤 Listen for Chirp';
+        if (statusBox) statusBox.style.display = 'none';
+        return;
+      }
+
+      try {
+        chirpMicStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
+        const ctx = getChirpAudioContext();
+        const source = ctx.createMediaStreamSource(chirpMicStream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
+
+        isChirpListening = true;
+        if (listenBtn) listenBtn.textContent = '⏹ Stop Listening';
+        if (statusBox) statusBox.style.display = 'flex';
+        if (statusText) statusText.textContent = 'Listening for 18.5kHz inaudible chirp…';
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        const sampleRate = ctx.sampleRate;
+        const binSize = sampleRate / analyser.fftSize;
+        const targetBin = Math.round(18500 / binSize);
+        let consecutiveHits = 0;
+
+        chirpListenTimer = setInterval(() => {
+          if (!isChirpListening) return;
+          analyser.getByteFrequencyData(dataArray);
+
+          let ultrasonicEnergy = 0;
+          for (let b = targetBin - 4; b <= targetBin + 30; b++) {
+            if (b < bufferLength) ultrasonicEnergy += dataArray[b];
+          }
+          ultrasonicEnergy = ultrasonicEnergy / 35;
+
+          if (ultrasonicEnergy > 35) {
+            consecutiveHits++;
+            if (consecutiveHits >= 3) {
+              consecutiveHits = 0;
+              if (statusText) statusText.textContent = 'Chirp detected! Performing peer handshake…';
+              playChirpSuccessChime();
+              showToast('Acoustic chirp detected! Paired with nearby device.');
+              toggleChirpListen();
+            }
+          } else {
+            consecutiveHits = Math.max(0, consecutiveHits - 1);
+          }
+        }, 100);
+
+      } catch (err) {
+        showToast('Microphone access denied: ' + err.message);
+      }
+    }
+
+    function playChirpSuccessChime() {
+      try {
+        const ctx = getChirpAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.setValueAtTime(880.00, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.18, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.35);
+      } catch (e) {}
+    }
   </script>
 </body>
 

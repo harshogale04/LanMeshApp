@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.webkit.GeolocationPermissions
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.URLUtil
@@ -34,6 +35,16 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import mobile.Mobile
+import android.content.Context
+import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
+import android.media.ImageReader
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
+import android.os.HandlerThread
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import android.webkit.WebStorage
 
 class MainActivity : AppCompatActivity() {
@@ -122,6 +133,26 @@ class MainActivity : AppCompatActivity() {
 
     /*
      * ------------------------------------------------------------
+     * GEOLOCATION PERMISSION
+     * ------------------------------------------------------------
+     */
+
+    private var pendingGeoCallback: GeolocationPermissions.Callback? = null
+    private var pendingGeoOrigin: String? = null
+
+    private val locationPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                          permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            pendingGeoCallback?.invoke(pendingGeoOrigin, granted, false)
+            pendingGeoCallback = null
+            pendingGeoOrigin = null
+        }
+
+    /*
+     * ------------------------------------------------------------
      * QR SCANNER
      * ------------------------------------------------------------
      */
@@ -137,6 +168,158 @@ class MainActivity : AppCompatActivity() {
                 connectToPeer(contents)
             }
         }
+
+    /*
+     * ------------------------------------------------------------
+     * NATIVE SCREEN SHARING (MEDIA PROJECTION BRIDGE)
+     * ------------------------------------------------------------
+     */
+
+    private var mediaProjection: MediaProjection? = null
+    private var virtualDisplay: VirtualDisplay? = null
+    private var imageReader: ImageReader? = null
+    private var screenCaptureThread: HandlerThread? = null
+    private var screenCaptureHandler: Handler? = null
+    @Volatile private var isScreenCapturing = false
+    private var lastScreenFrameMs = 0L
+
+    private val screenCaptureLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == RESULT_OK && result.data != null) {
+                startScreenCapture(result.resultCode, result.data!!)
+            } else {
+                runOnUiThread {
+                    Toast.makeText(this, "Screen share cancelled", Toast.LENGTH_SHORT).show()
+                    web.evaluateJavascript("if (typeof onNativeScreenShareError === 'function') onNativeScreenShareError('Cancelled');", null)
+                }
+            }
+        }
+
+    fun requestScreenShare() {
+        val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
+        if (mgr == null) {
+            Toast.makeText(this, "Screen sharing not supported on this device", Toast.LENGTH_SHORT).show()
+            return
+        }
+        screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
+    }
+
+    private fun startScreenCapture(resultCode: Int, data: Intent) {
+        val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager ?: return
+        try {
+            // Android 14 requirement: Start ScreenCaptureService with foregroundServiceType="mediaProjection"
+            // BEFORE calling getMediaProjection so the OS permits screen projection
+            val serviceIntent = Intent(this, ScreenCaptureService::class.java)
+            ContextCompat.startForegroundService(this, serviceIntent)
+
+            mediaProjection = mgr.getMediaProjection(resultCode, data)
+            if (mediaProjection == null) {
+                Toast.makeText(this, "Could not start screen projection", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val metrics = resources.displayMetrics
+            val targetWidth = 480
+            val targetHeight = ((480 * metrics.heightPixels / metrics.widthPixels.coerceAtLeast(1)) / 2) * 2
+            val density = metrics.densityDpi
+
+            imageReader = ImageReader.newInstance(targetWidth, targetHeight, PixelFormat.RGBA_8888, 2)
+            virtualDisplay = mediaProjection?.createVirtualDisplay(
+                "LanMeshScreenShare",
+                targetWidth, targetHeight, density,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader?.surface, null, null
+            )
+
+            screenCaptureThread = HandlerThread("ScreenCapture").apply { start() }
+            screenCaptureHandler = Handler(screenCaptureThread!!.looper)
+
+            isScreenCapturing = true
+
+            runOnUiThread {
+                web.evaluateJavascript("if (typeof onNativeScreenShareStarted === 'function') onNativeScreenShareStarted($targetWidth, $targetHeight);", null)
+                Toast.makeText(this, "Screen sharing started", Toast.LENGTH_SHORT).show()
+            }
+
+            imageReader?.setOnImageAvailableListener({ reader ->
+                val now = System.currentTimeMillis()
+                if (now - lastScreenFrameMs < 75) { // ~13 fps throttled
+                    val img = reader.acquireLatestImage()
+                    img?.close()
+                    return@setOnImageAvailableListener
+                }
+                lastScreenFrameMs = now
+
+                val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+                try {
+                    val plane = image.planes[0]
+                    val buffer = plane.buffer
+                    val pixelStride = plane.pixelStride
+                    val rowStride = plane.rowStride
+                    val rowPadding = rowStride - pixelStride * targetWidth
+
+                    val bmp = Bitmap.createBitmap(
+                        targetWidth + rowPadding / pixelStride,
+                        targetHeight,
+                        Bitmap.Config.ARGB_8888
+                    )
+                    bmp.copyPixelsFromBuffer(buffer)
+
+                    val finalBmp = if (rowPadding > 0) {
+                        Bitmap.createBitmap(bmp, 0, 0, targetWidth, targetHeight)
+                    } else {
+                        bmp
+                    }
+
+                    val stream = ByteArrayOutputStream()
+                    finalBmp.compress(Bitmap.CompressFormat.JPEG, 60, stream)
+                    val base64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+                    if (finalBmp != bmp) bmp.recycle()
+                    finalBmp.recycle()
+
+                    if (isScreenCapturing) {
+                        runOnUiThread {
+                            web.evaluateJavascript("if (typeof onNativeScreenFrame === 'function') onNativeScreenFrame('$base64');", null)
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Drop frame silently
+                } finally {
+                    image.close()
+                }
+            }, screenCaptureHandler)
+
+        } catch (e: Exception) {
+            Toast.makeText(this, "Screen share failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            stopScreenCapture()
+        }
+    }
+
+    fun stopScreenCapture() {
+        if (!isScreenCapturing && mediaProjection == null) return
+        isScreenCapturing = false
+        try {
+            virtualDisplay?.release()
+            virtualDisplay = null
+            imageReader?.close()
+            imageReader = null
+            mediaProjection?.stop()
+            mediaProjection = null
+            screenCaptureThread?.quitSafely()
+            screenCaptureThread = null
+            screenCaptureHandler = null
+        } catch (e: Exception) {}
+
+        try {
+            stopService(Intent(this, ScreenCaptureService::class.java))
+        } catch (e: Exception) {}
+
+        runOnUiThread {
+            web.evaluateJavascript("if (typeof onNativeScreenShareStopped === 'function') onNativeScreenShareStopped();", null)
+        }
+    }
 
     /*
      * ------------------------------------------------------------
@@ -223,6 +406,34 @@ class MainActivity : AppCompatActivity() {
 
             this@MainActivity.checkCameraAndScan()
         }
+
+        /*
+         * Start native Android screen capture.
+         */
+        @JavascriptInterface
+        fun startScreenShare() {
+            runOnUiThread {
+                this@MainActivity.requestScreenShare()
+            }
+        }
+
+        /*
+         * Stop native Android screen capture.
+         */
+        @JavascriptInterface
+        fun stopScreenShare() {
+            runOnUiThread {
+                this@MainActivity.stopScreenCapture()
+            }
+        }
+
+        /*
+         * Query if native screen sharing is available.
+         */
+        @JavascriptInterface
+        fun isNativeScreenShareAvailable(): Boolean {
+            return true
+        }
     }
 
     /*
@@ -253,6 +464,7 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true
 
             mediaPlaybackRequiresUserGesture = false
+            setGeolocationEnabled(true)
         }
 
         /*
@@ -287,6 +499,33 @@ class MainActivity : AppCompatActivity() {
          */
 
         web.webChromeClient = object : WebChromeClient() {
+
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String,
+                callback: GeolocationPermissions.Callback
+            ) {
+                val hasFine = ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+                val hasCoarse = ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (hasFine || hasCoarse) {
+                    callback.invoke(origin, true, false)
+                } else {
+                    pendingGeoCallback = callback
+                    pendingGeoOrigin = origin
+                    locationPermissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
+                }
+            }
 
             /*
              * File uploads
@@ -755,6 +994,9 @@ class MainActivity : AppCompatActivity() {
      */
 
     override fun onDestroy() {
+
+        stopScreenCapture()
+
 
         ui.removeCallbacksAndMessages(null)
 

@@ -731,6 +731,12 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 				break
 			}
 
+			// Local keepalive heartbeat from webview to keep websocket open
+			if msg.Type == "ping" {
+				conn.WriteJSON(ChatMessage{Type: "pong", Timestamp: time.Now().UnixMilli()})
+				continue
+			}
+
 			msg.Sender = host.ID().String()
 
 			// Call signaling over /ws
