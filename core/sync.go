@@ -3,6 +3,9 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -12,90 +15,58 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-const syncProtocolID = "/p2p-sync/1.0.0"
+const (
+	syncProtocolID     = "/p2p-sync/1.0.0"
+	legacySyncProtocol = "/p2p-chat-sync/1.0.0"
 
-// syncSem limits simultaneous active sync streams to 2, preventing CPU,
-// disk, and Wi-Fi interface saturation.
+	// syncCooldown enforces a 45-second debounce window per peer,
+	// preventing connection-flapping sync storms.
+	syncCooldown      = 45 * time.Second
+	syncStreamTimeout = 20 * time.Second
+	syncChunkLimit    = 50
+)
+
+// syncSem limits simultaneous active sync streams (initiator and responder
+// combined) to 2, preventing CPU, disk, and Wi-Fi interface saturation.
 var syncSem = make(chan struct{}, 2)
 
-// syncCooldown enforces a 45-second debounce window per peer,
-// preventing connection-flapping sync storms.
-const syncCooldown = 45 * time.Second
-
-type syncGroupManifest struct {
-	GroupID    string   `json:"groupId"`
-	MessageIDs []string `json:"messageIds"`
+// SyncEnvelope wraps typed JSON messages over /p2p-sync/1.0.0 streams.
+type SyncEnvelope struct {
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
 }
 
-type syncManifest struct {
-	Groups []syncGroupManifest `json:"groups"`
+type DigestRequest struct {
+	Digest map[string]int64 `json:"digest"` // groupID -> highestTimestamp
 }
 
-type syncPayload struct {
-	Missing  []ChatMessage       `json:"missing"`
-	Manifest []syncGroupManifest `json:"manifest,omitempty"`
+type GroupDelta struct {
+	GroupID string `json:"groupId"`
+	Since   int64  `json:"since"`
 }
 
-func messageIndexFor(groupID string) map[string]ChatMessage {
-	index := make(map[string]ChatMessage)
-	for _, m := range historyFor(groupID) {
-		if m.MessageID != "" {
-			index[m.MessageID] = m
-		}
-	}
-	return index
+type DigestResponse struct {
+	Groups []GroupDelta `json:"groups"`
 }
 
-func groupKnownLocally(groupID string) bool {
-	for _, g := range knownGroups() {
-		if g == groupID {
-			return true
-		}
-	}
-	return false
+type PullRequest struct {
+	GroupID string `json:"groupId"`
+	Since   int64  `json:"since"`
+	Limit   int    `json:"limit"`
 }
 
-func buildLocalManifest() []syncGroupManifest {
-	var manifest []syncGroupManifest
-	for _, g := range knownGroups() {
-		index := messageIndexFor(g)
-		ids := make([]string, 0, len(index))
-		for id := range index {
-			ids = append(ids, id)
-		}
-		manifest = append(manifest, syncGroupManifest{GroupID: g, MessageIDs: ids})
-	}
-	return manifest
+type PullResponse struct {
+	GroupID   string        `json:"groupId"`
+	Messages  []ChatMessage `json:"messages"`
+	HasMore   bool          `json:"hasMore"`
+	NextSince int64         `json:"nextSince"`
 }
 
-func computeMissing(theirManifest []syncGroupManifest) []ChatMessage {
-	haveByGroup := make(map[string]map[string]bool)
-	for _, g := range theirManifest {
-		set := make(map[string]bool, len(g.MessageIDs))
-		for _, id := range g.MessageIDs {
-			set[id] = true
-		}
-		haveByGroup[g.GroupID] = set
-	}
-
-	var missing []ChatMessage
-	for _, groupID := range knownGroups() {
-		theyHave := haveByGroup[groupID]
-		for _, m := range historyFor(groupID) {
-			if m.MessageID == "" {
-				continue
-			}
-			if theyHave == nil || !theyHave[m.MessageID] {
-				missing = append(missing, m)
-			}
-		}
-	}
-	return missing
-}
-
-func syncServer(s network.Stream, applyFn func(ChatMessage)) {
+// handleSyncStream serves the responder side of /p2p-sync/1.0.0.
+func handleSyncStream(s network.Stream) {
 	defer s.Close()
 
+	// Bound concurrent sync streams: reject (don't queue) when saturated
 	select {
 	case syncSem <- struct{}{}:
 		defer func() { <-syncSem }()
@@ -103,67 +74,190 @@ func syncServer(s network.Stream, applyFn func(ChatMessage)) {
 		return
 	}
 
+	_ = s.SetDeadline(time.Now().Add(syncStreamTimeout))
+
 	dec := json.NewDecoder(s)
 	enc := json.NewEncoder(s)
 
-	// Step 1: read their manifest
-	var reqManifest syncManifest
-	if err := dec.Decode(&reqManifest); err != nil {
+	// Step 1: Read DigestRequest
+	var reqEnv SyncEnvelope
+	if err := dec.Decode(&reqEnv); err != nil {
+		return
+	}
+	if reqEnv.Type != "digest_request" {
 		return
 	}
 
-	// Step 2: reply with what they are missing + our manifest
-	reply := syncPayload{
-		Missing:  computeMissing(reqManifest.Groups),
-		Manifest: buildLocalManifest(),
-	}
-	if err := enc.Encode(reply); err != nil {
+	var dReq DigestRequest
+	if err := json.Unmarshal(reqEnv.Payload, &dReq); err != nil {
 		return
 	}
 
-	// Step 3: read back what we are missing, apply it
-	var final syncPayload
-	if err := dec.Decode(&final); err != nil {
+	// Compute which groups have newer messages than peer's digest
+	localMarks := groupHighWatermark()
+	var deltas []GroupDelta
+
+	// Check groups known locally
+	for _, groupID := range knownGroups() {
+		peerSince, peerHasGroup := dReq.Digest[groupID]
+		localMax := localMarks[groupID]
+
+		if !peerHasGroup {
+			// Peer doesn't know this group: offer all history from 0
+			deltas = append(deltas, GroupDelta{GroupID: groupID, Since: 0})
+		} else if localMax > peerSince {
+			// Local node has messages newer than peer's watermark
+			deltas = append(deltas, GroupDelta{GroupID: groupID, Since: peerSince})
+		}
+	}
+
+	dRespData, _ := json.Marshal(DigestResponse{Groups: deltas})
+	if err := enc.Encode(SyncEnvelope{Type: "digest_response", Payload: dRespData}); err != nil {
 		return
 	}
-	for _, m := range final.Missing {
-		applyFn(m)
+
+	// Step 2: Serve chunked PullRequests
+	for {
+		_ = s.SetDeadline(time.Now().Add(syncStreamTimeout))
+		var pReqEnv SyncEnvelope
+		if err := dec.Decode(&pReqEnv); err != nil {
+			if err == io.EOF {
+				return
+			}
+			return
+		}
+		if pReqEnv.Type != "pull_request" {
+			return
+		}
+
+		var pReq PullRequest
+		if err := json.Unmarshal(pReqEnv.Payload, &pReq); err != nil {
+			return
+		}
+
+		limit := pReq.Limit
+		if limit <= 0 || limit > syncChunkLimit {
+			limit = syncChunkLimit
+		}
+
+		msgs, hasMore, nextSince := historySince(pReq.GroupID, pReq.Since, limit)
+		pRespData, _ := json.Marshal(PullResponse{
+			GroupID:   pReq.GroupID,
+			Messages:  msgs,
+			HasMore:   hasMore,
+			NextSince: nextSince,
+		})
+
+		if err := enc.Encode(SyncEnvelope{Type: "pull_response", Payload: pRespData}); err != nil {
+			return
+		}
 	}
 }
 
-func requestSync(ctx context.Context, host libp2phost.Host, p peer.ID, applyFn func(ChatMessage)) {
-	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+// requestSync initiates /p2p-sync/1.0.0 catch-up with target peer using local database watermarks.
+func requestSync(ctx context.Context, host libp2phost.Host, target peer.ID, applyFn func(ChatMessage)) error {
+	return requestSyncWithWatermarks(ctx, host, target, groupHighWatermark(), applyFn)
+}
+
+// requestSyncWithWatermarks initiates /p2p-sync/1.0.0 catch-up with target peer using the provided group watermarks.
+func requestSyncWithWatermarks(ctx context.Context, host libp2phost.Host, target peer.ID, localMarks map[string]int64, applyFn func(ChatMessage)) error {
+	// Acquire sync semaphore (limit 2 concurrent syncs)
+	select {
+	case syncSem <- struct{}{}:
+		defer func() { <-syncSem }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	sctx, cancel := context.WithTimeout(ctx, syncStreamTimeout)
 	defer cancel()
 
-	stream, err := host.NewStream(sctx, p, syncProtocolID)
+	s, err := host.NewStream(sctx, target, syncProtocolID, legacySyncProtocol)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to open sync stream: %w", err)
 	}
-	defer stream.Close()
+	defer s.Close()
+	_ = s.SetDeadline(time.Now().Add(syncStreamTimeout))
 
-	dec := json.NewDecoder(stream)
-	enc := json.NewEncoder(stream)
+	dec := json.NewDecoder(s)
+	enc := json.NewEncoder(s)
 
-	// Step 1: send our manifest
-	if err := enc.Encode(syncManifest{Groups: buildLocalManifest()}); err != nil {
-		return
+	// Step 1: Send our watermarks
+	if localMarks == nil {
+		localMarks = make(map[string]int64)
 	}
-
-	// Step 2: read what we're missing + their manifest
-	var reply syncPayload
-	if err := dec.Decode(&reply); err != nil {
-		return
-	}
-	for _, m := range reply.Missing {
-		applyFn(m)
+	dReqData, _ := json.Marshal(DigestRequest{Digest: localMarks})
+	if err := enc.Encode(SyncEnvelope{Type: "digest_request", Payload: dReqData}); err != nil {
+		return err
 	}
 
-	// Step 3: send what they are missing
-	final := syncPayload{Missing: computeMissing(reply.Manifest)}
-	if err := enc.Encode(final); err != nil {
-		return
+	// Step 2: Read DigestResponse
+	var dRespEnv SyncEnvelope
+	if err := dec.Decode(&dRespEnv); err != nil {
+		return err
 	}
+	if dRespEnv.Type != "digest_response" {
+		return fmt.Errorf("unexpected envelope: %s", dRespEnv.Type)
+	}
+
+	var dResp DigestResponse
+	if err := json.Unmarshal(dRespEnv.Payload, &dResp); err != nil {
+		return err
+	}
+
+	if len(dResp.Groups) == 0 {
+		return nil // Already completely up to date
+	}
+
+	// Step 3: Pull chunked message deltas
+	for _, delta := range dResp.Groups {
+		since := delta.Since
+		for {
+			_ = s.SetDeadline(time.Now().Add(syncStreamTimeout))
+			pReqData, _ := json.Marshal(PullRequest{
+				GroupID: delta.GroupID,
+				Since:   since,
+				Limit:   syncChunkLimit,
+			})
+			if err := enc.Encode(SyncEnvelope{Type: "pull_request", Payload: pReqData}); err != nil {
+				return err
+			}
+
+			var pRespEnv SyncEnvelope
+			if err := dec.Decode(&pRespEnv); err != nil {
+				return err
+			}
+			if pRespEnv.Type != "pull_response" {
+				return fmt.Errorf("expected pull_response, got %s", pRespEnv.Type)
+			}
+
+			var pResp PullResponse
+			if err := json.Unmarshal(pRespEnv.Payload, &pResp); err != nil {
+				return err
+			}
+
+			// applyFn persists each message (deduped), notifies the UI, and
+			// announces newly discovered groups. Synced history is NOT
+			// re-relayed to the mesh (zero live-relay echo).
+			for _, msg := range pResp.Messages {
+				applyFn(msg)
+			}
+
+			if !pResp.HasMore || len(pResp.Messages) == 0 {
+				break
+			}
+			since = pResp.NextSince
+		}
+	}
+
+	log.Printf("[LANMESH-SYNC] Catch-up sync complete with peer %s", target.String()[:8])
+	return nil
 }
+
+// ---------------------------------------------------------------------
+// Connection-triggered sync notifee.
+// Uses lexicographical peer ID tie-breaking to avoid connection glare.
+// ---------------------------------------------------------------------
 
 type syncNotifee struct {
 	ctx     context.Context
@@ -195,22 +289,24 @@ func (n *syncNotifee) shouldSync(p peer.ID) bool {
 
 func (n *syncNotifee) Connected(_ network.Network, c network.Conn) {
 	p := c.RemotePeer()
-	// Glare Prevention: Lexicographical Peer ID tie-breaking (host.ID() < remoteID)
-	// so only one side initiates sync per peer pair
-	if n.host.ID() >= p {
+
+	// Glare prevention: the peer with the smaller Peer ID initiates sync, so
+	// normally exactly one sync stream is opened per pair of nodes. An admin
+	// node always initiates so the audit log catches up from every peer.
+	isInitiator := IsAdminNode() || n.host.ID() < p
+	if !isInitiator {
 		return
 	}
 	if !n.shouldSync(p) {
 		return
 	}
+
 	go func() {
-		select {
-		case syncSem <- struct{}{}:
-			defer func() { <-syncSem }()
-		case <-n.ctx.Done():
-			return
+		// Small delay to allow stream multiplexer handshake to settle
+		time.Sleep(300 * time.Millisecond)
+		if err := requestSync(n.ctx, n.host, p, n.applyFn); err != nil {
+			log.Printf("[LANMESH-SYNC] Sync attempt with %s completed/skipped: %v", p.String()[:8], err)
 		}
-		requestSync(n.ctx, n.host, p, n.applyFn)
 	}()
 }
 

@@ -75,24 +75,32 @@ func main() {
 	}
 
 	fmt.Println("==================================================")
-	fmt.Println("LANMesh Node Online")
-	fmt.Println("Peer ID:  ", node.PeerID)
-	fmt.Println("Nickname: ", node.Nickname)
-	if node.IsAdmin {
-		fmt.Println("Role:      AUTHORITATIVE ADMIN STATION")
-		fmt.Printf("Admin UI:  http://localhost:%d/admin\n", *port)
-	} else {
-		fmt.Println("Role:      Decentralized Standard Peer")
-	}
-	fmt.Printf("Web Chat:  http://localhost:%d\n", *port)
-	fmt.Println("==================================================")
+fmt.Println("LANMesh — Serverless P2P Ad-Hoc Mesh Node")
+fmt.Println("==================================================")
+fmt.Println("Peer ID:   ", node.PeerID)
+fmt.Println("Nickname:  ", node.Nickname)
 
-	if !*noBrowser {
-		go func() {
-			time.Sleep(500 * time.Millisecond)
-			openBrowser(fmt.Sprintf("http://localhost:%d", *port))
-		}()
-	}
+if node.IsAdmin {
+    fmt.Println("Role:      AUTHORITATIVE ADMIN STATION")
+    fmt.Printf("Admin UI:  http://localhost:%d/admin\n", *port)
+} else {
+    fmt.Println("Role:      Decentralized Standard Peer")
+}
 
-	select {} // block forever
+fmt.Printf("Web UI:     http://localhost:%d\n", *port)
+
+if *p2pPort > 0 {
+    fmt.Printf("P2P Wire:   tcp://0.0.0.0:%d\n", *p2pPort)
+}
+
+fmt.Println("==================================================")
+
+if !*noBrowser {
+    go func() {
+        time.Sleep(500 * time.Millisecond)
+        openBrowser(fmt.Sprintf("http://localhost:%d", *port))
+    }()
+}
+
+select {} // block forever — desktop CLI runs indefinitely
 }

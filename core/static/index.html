@@ -768,6 +768,43 @@
       vertical-align: middle;
       user-select: none;
       margin-left: 4px;
+      letter-spacing: 0.3px;
+      opacity: 0.85;
+    }
+    .hop-badge.direct {
+      background: rgba(46, 213, 115, 0.15);
+      color: #2ed573;
+      border: 1px solid rgba(46, 213, 115, 0.3);
+    }
+    .hop-badge.relayed {
+      background: rgba(242, 194, 48, 0.15);
+      color: #f2c230;
+      border: 1px solid rgba(242, 194, 48, 0.3);
+    }
+    .hop-badge.multi {
+      background: rgba(30, 144, 255, 0.15);
+      color: #1e90ff;
+      border: 1px solid rgba(30, 144, 255, 0.3);
+    }
+
+    .bubble-wrap {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px
+    }
+
+    .row.self .bubble-wrap {
+      flex-direction: row-reverse
+    }
+
+    .bubble {
+      padding: 8px 14px;
+      border-radius: 18px;
+      line-height: 1.35;
+      font-size: 1.0625rem;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+      min-width: 0
     }
 
     .hop-badge:hover {
@@ -4316,12 +4353,16 @@
       let hopBadgeHtml = '';
       if (!msg.isSelf && msg.hops !== undefined && msg.hops !== null && msg.hops > 0) {
         let badgeText = '';
+        let badgeClass = '';
         if (msg.hops === 1) {
           badgeText = '⚡ Direct';
+          badgeClass = 'direct';
         } else if (msg.hops === 2) {
           badgeText = '🔄 1 relay';
+          badgeClass = 'relayed';
         } else if (msg.hops >= 3) {
           badgeText = `🌐 ${msg.hops} hops`;
+          badgeClass = 'multi';
         }
         if (badgeText) {
           let routeStr = '';
@@ -4329,16 +4370,21 @@
             routeStr = 'Route: ' + msg.hopTrail.map(p => p.length > 12 ? p.substring(0, 8) + '...' : p).join(' → ');
           } else if (msg.sender) {
             routeStr = 'Route: ' + (msg.sender.length > 12 ? msg.sender.substring(0, 8) + '...' : msg.sender);
+          } else {
+            routeStr = msg.hops + ' hop' + (msg.hops > 1 ? 's' : '');
           }
-          const escapedRoute = routeStr.replace(/"/g, '&quot;');
-          hopBadgeHtml = `<span class="hop-badge" title="${escapedRoute}">${badgeText}</span>`;
+          const escapedRoute = routeStr
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          hopBadgeHtml = `<span class="hop-badge hop-tag ${badgeClass}" title="${escapedRoute}">${badgeText}</span>`;
         }
       }
 
       const meta = document.createElement('div');
       meta.className = 'meta';
       meta.innerHTML = `<span>${senderLabel}</span><span class="tag">#${msg.groupId}</span>${timeLabel ? `<span class="time">${timeLabel}</span>` : ''}${hopBadgeHtml}${(editedText && !isDeleted) ? `<span class="edited-tag">(edited)</span>` : ''}`;
-
       const bubbleWrap = document.createElement('div');
       bubbleWrap.className = 'bubble-wrap';
 
@@ -4492,6 +4538,13 @@
               addr.style.cssText = 'color:#aaa;margin-left:6px;font-size:0.7em;';
               addr.textContent = addrLabel;
               row.appendChild(addr);
+            }
+
+            if (p.latencyMs !== undefined && p.latencyMs > 0) {
+              const latBadge = document.createElement('span');
+              latBadge.style.cssText = 'color:#2ed573;background:rgba(46,213,115,0.15);padding:1px 4px;border-radius:3px;font-size:0.68em;margin-left:6px;';
+              latBadge.textContent = `${p.latencyMs}ms`;
+              row.appendChild(latBadge);
             }
 
             const voiceBtn = document.createElement('button');

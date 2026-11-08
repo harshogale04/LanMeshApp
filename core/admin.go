@@ -67,8 +67,17 @@ func (a *adminStore) close() error {
 	return nil
 }
 
+// isEphemeralType reports message types that must not enter the forensic audit log.
+func isEphemeralType(t string) bool {
+	return t == "typing" || t == "ping" || t == "whoami" || t == "sync_status"
+}
+
 func (a *adminStore) record(msg ChatMessage) {
 	if a == nil || msg.MessageID == "" {
+		return
+	}
+	// Filter ephemeral pings and typing indicators from forensic audit log
+	if isEphemeralType(msg.Type) {
 		return
 	}
 	a.mu.Lock()
@@ -85,6 +94,38 @@ func (a *adminStore) record(msg ChatMessage) {
 			a.file.Write([]byte("\n"))
 		}
 	}
+}
+
+// backfillFromHistory scans all known local groups (via knownGroups/historyFor)
+// and ingests any unlogged messages. Returns the number of messages added.
+func (a *adminStore) backfillFromHistory() int {
+	if a == nil {
+		return 0
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	backfilled := 0
+	for _, g := range knownGroups() {
+		for _, m := range historyFor(g) {
+			if m.MessageID == "" || a.seenIDs[m.MessageID] {
+				continue
+			}
+			if isEphemeralType(m.Type) {
+				continue
+			}
+			a.seenIDs[m.MessageID] = true
+			a.messages = append(a.messages, m)
+			if a.file != nil {
+				if data, err := json.Marshal(m); err == nil {
+					a.file.Write(data)
+					a.file.Write([]byte("\n"))
+				}
+			}
+			backfilled++
+		}
+	}
+	return backfilled
 }
 
 func (a *adminStore) snapshot() []ChatMessage {
@@ -177,6 +218,27 @@ func SetAdminConfig(secret, dir, nickname string) {
 	}
 }
 
+// setAdminDataDir sets the directory used for admin logs and the secret file.
+func setAdminDataDir(dir string) {
+	adminMu.Lock()
+	adminDir = dir
+	adminMu.Unlock()
+}
+
+// setAdminSecret sets the admin secret and marks this node as an admin station.
+func setAdminSecret(secret string) {
+	adminMu.Lock()
+	adminSecret = strings.TrimSpace(secret)
+	isAdminNodeFlag = adminSecret != ""
+	adminMu.Unlock()
+}
+
+func getAdminSecret() string {
+	adminMu.RLock()
+	defer adminMu.RUnlock()
+	return adminSecret
+}
+
 func IsAdminNode() bool {
 	adminMu.RLock()
 	defer adminMu.RUnlock()
@@ -205,6 +267,8 @@ func enableAdminLogging() (*adminStore, error) {
 	adminMu.Lock()
 	defer adminMu.Unlock()
 	if adminStor != nil {
+		// Run backfill
+		adminStor.backfillFromHistory()
 		return adminStor, nil
 	}
 	if adminDir == "" {
@@ -216,7 +280,8 @@ func enableAdminLogging() (*adminStore, error) {
 		return nil, err
 	}
 	adminStor = s
-	fmt.Println("[LANMESH] Admin audit logging active — writing to", logPath)
+	s.backfillFromHistory()
+	fmt.Println("[LANMESH] Admin audit logging active — writing forensic audit trail to", logPath)
 	return adminStor, nil
 }
 
@@ -389,9 +454,7 @@ func registerAdminRoutes(mux *http.ServeMux, broadcastFn func(ChatMessage), getD
 			return
 		}
 
-		adminMu.RLock()
-		secret := adminSecret
-		adminMu.RUnlock()
+		secret := getAdminSecret()
 
 		mac := hmac.New(sha256.New, []byte(secret))
 		mac.Write([]byte(req.Nonce))
@@ -413,6 +476,9 @@ func registerAdminRoutes(mux *http.ServeMux, broadcastFn func(ChatMessage), getD
 			MaxAge:   8 * 3600,
 			Expires:  time.Now().Add(8 * time.Hour),
 		})
+
+		// Start forensic logging (and backfill) once an admin has authenticated
+		_, _ = enableAdminLogging()
 
 		json.NewEncoder(w).Encode(map[string]string{"status": "authenticated"})
 	})
@@ -711,7 +777,7 @@ tr:hover td{background:#1a1a1d;}
 <div class="stat-label">Audit Records</div>
 </div>
 <div class="stat-card">
-<div class="stat-num">` + GetDefaultNickname() + `</div>
+<div class="stat-num">` + html.EscapeString(GetDefaultNickname()) + `</div>
 <div class="stat-label">Roster Identity</div>
 </div>
 <div class="stat-card">
@@ -763,10 +829,9 @@ tr:hover td{background:#1a1a1d;}
 				shortTrail := make([]string, len(m.HopTrail))
 				for idx, p := range m.HopTrail {
 					if len(p) > 8 {
-						shortTrail[idx] = p[:8] + "..."
-					} else {
-						shortTrail[idx] = p
+						p = p[:8] + "..."
 					}
+					shortTrail[idx] = html.EscapeString(p)
 				}
 				trailStr = strings.Join(shortTrail, " &rarr; ")
 			}

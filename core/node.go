@@ -45,7 +45,12 @@ type NodeConfig struct {
 	Nickname    string
 	DataDir     string
 	AdminSecret string
+	NoBrowser   bool
 }
+
+// NodeOptions is the startup configuration for a LANMESH daemon node.
+// It is an alias of NodeConfig so both names keep working.
+type NodeOptions = NodeConfig
 
 // Node is a running LANMESH instance.
 type Node struct {
@@ -57,6 +62,7 @@ type Node struct {
 	ctx        context.Context
 	host       lphost.Host
 	seen       *seenCache
+	beacon     *BeaconManager
 }
 
 type peerRosterInfo struct {
@@ -181,6 +187,10 @@ func (n *Node) PeerList() []string {
 func (n *Node) Stop() error {
 	n.cancel()
 
+	if n.beacon != nil {
+		n.beacon.Stop()
+	}
+
 	var err error
 
 	if n.httpServer != nil {
@@ -216,11 +226,45 @@ func (n *Node) Stop() error {
 	return err
 }
 
+// loadOrCreateIdentity loads (or creates and persists) the node's Ed25519
+// identity key from <dataDir>/peer.key, logging if an existing key is corrupted.
+func loadOrCreateIdentity(dataDir string) (crypto.PrivKey, error) {
+	keyPath := filepath.Join(dataDir, "peer.key")
+	if data, err := os.ReadFile(keyPath); err == nil {
+		priv, err := crypto.UnmarshalPrivateKey(data)
+		if err == nil {
+			return priv, nil
+		}
+		log.Printf("[LANMESH] Corrupted %s, generating fresh key: %v", keyPath, err)
+	}
+
+	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, -1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ed25519 key: %w", err)
+	}
+
+	data, err := crypto.MarshalPrivateKey(priv)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := os.WriteFile(keyPath, data, 0600); err != nil {
+		log.Printf("[LANMESH] Warning: failed to persist %s: %v", keyPath, err)
+	}
+	return priv, nil
+}
+
+// StartNode brings up one LANMESH node with default options.
 func StartNode(port int, dataDir string) (*Node, error) {
 	return StartNodeWithConfig(NodeConfig{
 		Port:    port,
 		DataDir: dataDir,
 	})
+}
+
+// StartNodeWithOptions brings up one LANMESH node according to NodeOptions.
+func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
+	return StartNodeWithConfig(opts)
 }
 
 func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
@@ -231,6 +275,10 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 		return nil, fmt.Errorf("failed to create data dir: %w", err)
 	}
 
+	// Admin secret precedence: explicit config > LANMESH_ADMIN_SECRET env > <dataDir>/admin.secret
+	if cfg.AdminSecret == "" {
+		cfg.AdminSecret = strings.TrimSpace(os.Getenv("LANMESH_ADMIN_SECRET"))
+	}
 	if cfg.AdminSecret == "" {
 		if secretData, err := os.ReadFile(filepath.Join(cfg.DataDir, "admin.secret")); err == nil {
 			cfg.AdminSecret = strings.TrimSpace(string(secretData))
@@ -245,18 +293,27 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 		return nil, err
 	}
 
-	var opts []libp2p.Option
-	p2pPort := cfg.P2PPort
-	if p2pPort > 0 {
-		opts = append(opts, libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", p2pPort)))
-	} else {
-		opts = append(opts, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+	// Persist / load Ed25519 identity key
+	privKey, err := loadOrCreateIdentity(cfg.DataDir)
+	if err != nil {
+		cancel()
+		return nil, err
 	}
 
-	keyPath := filepath.Join(cfg.DataDir, "peer.key")
-	if priv, err := loadOrGenerateKey(keyPath); err == nil && priv != nil {
-		opts = append(opts, libp2p.Identity(priv))
+	// TCP-only: QUIC/UDP is frequently blocked by Android hotspot NAT, AP
+	// client isolation, and consumer routers, causing silent 8-second dial
+	// timeouts before the stack gives up. TCP is more reliably traversable
+	// on typical LAN/hotspot setups.
+	p2pListenPort := 0
+	if cfg.P2PPort > 0 {
+		p2pListenPort = cfg.P2PPort
 	}
+
+	var opts []libp2p.Option
+	opts = append(opts,
+		libp2p.Identity(privKey),
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", p2pListenPort)),
+	)
 
 	opts = append(opts,
 		libp2p.Security(tls.ID, tls.New),
@@ -282,7 +339,10 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 
 	// If this node is an authoritative admin node, activate audit logging and backfill immediately
 	if IsAdminNode() {
-		if store, err := enableAdminLogging(); err == nil && store != nil {
+		if store, err := enableAdminLogging(); err != nil {
+			log.Printf("[LANMESH-ADMIN] Warning: failed to enable boot-time admin logging: %v", err)
+		} else if store != nil {
+			log.Printf("[LANMESH-ADMIN] Boot-time authoritative admin node active")
 			dbMu.RLock()
 			currentDB := db
 			dbMu.RUnlock()
@@ -384,12 +444,17 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 	}
 
 	host.SetStreamHandler(syncProtocolID, func(s network.Stream) {
-		syncServer(s, applyBackfill)
+		handleSyncStream(s)
+	})
+	host.SetStreamHandler(legacySyncProtocol, func(s network.Stream) {
+		handleSyncStream(s)
 	})
 
 	host.Network().Notify(newSyncNotifee(ctx, host, applyBackfill))
 
-	// Direct call signaling handler
+	// Direct call signaling handler.
+	// Delivers call signals to this device's connected WebSocket clients
+	// only. Call signals are not persisted, counted, or relayed.
 	host.SetStreamHandler(callProtocolID, func(s network.Stream) {
 		defer s.Close()
 
@@ -433,7 +498,12 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 
 	setupPEX(ctx, host)
 
+	// UDP LAN Broadcast Beacon (:9999): robust fallback discovery for Android
+	// API 30+ where SELinux sandbox blocks netlink route-table inspection.
+	beaconMgr, _ := startBeaconEngine(ctx, host)
+
 	// Automated Admin Presence Self-Ping: broadcast a ping frame every 20 seconds
+	// to keep the admin node active in rosters across the mesh
 	if IsAdminNode() {
 		go func() {
 			ticker := time.NewTicker(20 * time.Second)
@@ -510,7 +580,8 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 			for _, conn := range host.Network().ConnsToPeer(p) {
 				addrStrs = append(addrStrs, conn.RemoteMultiaddr().String())
 			}
-			peerList = append(peerList, peerInfo{ID: p.String(), Addrs: addrStrs, LatencyMs: 1})
+			latMs := host.Peerstore().LatencyEWMA(p).Milliseconds()
+			peerList = append(peerList, peerInfo{ID: p.String(), Addrs: addrStrs, LatencyMs: latMs})
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"self":  host.ID().String(),
@@ -518,6 +589,7 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 		})
 	})
 
+	// GET /groups: returns all known group channels
 	mux.HandleFunc("/groups", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -525,11 +597,12 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 		})
 	})
 
+	// GET /history: paginated message history using O(log N) cursor seek
 	mux.HandleFunc("/history", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		group := r.URL.Query().Get("group")
-		if group == "" {
-			group = "general"
+		groupID := r.URL.Query().Get("group")
+		if groupID == "" {
+			groupID = "general"
 		}
 		limit := 50
 		if lStr := r.URL.Query().Get("limit"); lStr != "" {
@@ -537,23 +610,26 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 				limit = parsed
 			}
 		}
-		var since int64 = 0
+		var sinceMs int64 = 0
 		if sStr := r.URL.Query().Get("since"); sStr != "" {
 			if parsed, err := strconv.ParseInt(sStr, 10, 64); err == nil {
-				since = parsed
+				sinceMs = parsed
 			}
 		}
-		msgs := historyForSeek(group, since, limit)
+
+		msgs, hasMore, nextSince := historySince(groupID, sinceMs, limit)
 		if msgs == nil {
 			msgs = []ChatMessage{}
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"group":    group,
-			"messages": msgs,
-			"hasMore":  len(msgs) == limit,
+			"group":     groupID,
+			"messages":  msgs,
+			"hasMore":   hasMore,
+			"nextSince": nextSince,
 		})
 	})
 
+	// GET /presence: live roster snapshot (nicknames and last-seen from received traffic)
 	mux.HandleFunc("/presence", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -637,6 +713,7 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 		})
 	})
 
+	// WS /signal: dedicated WebRTC signaling endpoint isolated from chat
 	handleSignalConn := func(conn *wsConn) {
 		h.add(conn)
 		defer h.remove(conn)
@@ -650,6 +727,7 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 				msg.Sender = host.ID().String()
 				msg.Timestamp = time.Now().UnixMilli()
 				if msg.To == "" {
+					// Room broadcast
 					connectedPeers := host.Network().Peers()
 					data, err := json.Marshal(msg)
 					if err == nil {
@@ -671,6 +749,7 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 					continue
 				}
 
+				// 1:1 call signal
 				targetID, err := peer.Decode(msg.To)
 				if err != nil {
 					continue
@@ -831,6 +910,7 @@ func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
 		ctx:        ctx,
 		host:       host,
 		seen:       nodeSeen,
+		beacon:     beaconMgr,
 	}, nil
 }
 

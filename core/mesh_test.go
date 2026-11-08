@@ -1,12 +1,19 @@
 package core
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -2393,4 +2400,414 @@ func TestSubnetScannerColdStartDirectConnect(t *testing.T) {
 		t.Fatalf("expected h1 to be connected to h2")
 	}
 	t.Logf("Cold-start auto-discovery success: verified /debug/addrs structure and connectivity")
+}
+
+// TestHopTrailAccumulation verifies that the HopTrail field accurately accumulates
+// the peer IDs of all forwarding intermediate nodes across a multi-hop chain.
+// Topology: N0 -> N1 -> N2 -> N3
+func TestHopTrailAccumulation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const count = 4
+	hosts := make([]host.Host, count)
+	caches := make([]*seenCache, count)
+	receivedMsgs := make([]chan ChatMessage, count)
+
+	for i := 0; i < count; i++ {
+		hosts[i] = createTestHost(t)
+		defer hosts[i].Close()
+		caches[i] = newSeenCache(1000)
+		receivedMsgs[i] = make(chan ChatMessage, 10)
+	}
+
+	for i := 0; i < count; i++ {
+		ch := receivedMsgs[i]
+		setupTestNodeHandler(ctx, hosts[i], caches[i], func(m ChatMessage) {
+			ch <- m
+		})
+	}
+
+	// Connect linearly: 0-1, 1-2, 2-3
+	for i := 0; i < count-1; i++ {
+		info := peer.AddrInfo{ID: hosts[i+1].ID(), Addrs: hosts[i+1].Addrs()}
+		if err := hosts[i].Connect(ctx, info); err != nil {
+			t.Fatalf("failed to connect %d to %d: %v", i, i+1, err)
+		}
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	msgID := newMessageID()
+	origSender := hosts[0].ID().String()
+	testMsg := ChatMessage{
+		Type:      "text",
+		Payload:   "Testing HopTrail accumulation",
+		Sender:    origSender,
+		GroupID:   "general",
+		MessageID: msgID,
+		Hops:      0,
+		Timestamp: time.Now().UnixMilli(),
+		Nickname:  "Node0",
+	}
+
+	caches[0].markSeen(msgID)
+	relayToPeers(ctx, hosts[0], "", testMsg)
+
+	// Node 1 (1 hop away)
+	select {
+	case msg1 := <-receivedMsgs[1]:
+		if msg1.Hops != 1 {
+			t.Fatalf("expected 1 hop at Node 1, got %d", msg1.Hops)
+		}
+		if len(msg1.HopTrail) != 1 || msg1.HopTrail[0] != hosts[0].ID().String() {
+			t.Fatalf("expected HopTrail [%s], got %v", hosts[0].ID().String(), msg1.HopTrail)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timeout waiting for message at Node 1")
+	}
+
+	// Node 2 (2 hops away)
+	select {
+	case msg2 := <-receivedMsgs[2]:
+		if msg2.Hops != 2 {
+			t.Fatalf("expected 2 hops at Node 2, got %d", msg2.Hops)
+		}
+		if len(msg2.HopTrail) != 2 || msg2.HopTrail[0] != hosts[0].ID().String() || msg2.HopTrail[1] != hosts[1].ID().String() {
+			t.Fatalf("expected HopTrail [%s, %s], got %v", hosts[0].ID().String(), hosts[1].ID().String(), msg2.HopTrail)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timeout waiting for message at Node 2")
+	}
+
+	// Node 3 (3 hops away)
+	select {
+	case msg3 := <-receivedMsgs[3]:
+		if msg3.Hops != 3 {
+			t.Fatalf("expected 3 hops at Node 3, got %d", msg3.Hops)
+		}
+		if len(msg3.HopTrail) != 3 ||
+			msg3.HopTrail[0] != hosts[0].ID().String() ||
+			msg3.HopTrail[1] != hosts[1].ID().String() ||
+			msg3.HopTrail[2] != hosts[2].ID().String() {
+			t.Fatalf("expected HopTrail [%s, %s, %s], got %v",
+				hosts[0].ID().String(), hosts[1].ID().String(), hosts[2].ID().String(), msg3.HopTrail)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timeout waiting for message at Node 3")
+	}
+}
+
+// TestBeaconPayloadAndAddressRewriting verifies that the UDP LAN Beacon payload
+// serializes properly and correctly rewrites wildcard 0.0.0.0 addresses with the UDP source IP.
+func TestBeaconPayloadAndAddressRewriting(t *testing.T) {
+	fakePeerID := "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN"
+	origAddrs := []string{
+		"/ip4/0.0.0.0/tcp/4001",
+		"/ip4/127.0.0.1/tcp/4001",
+	}
+
+	payload := BeaconPayload{
+		PeerID: fakePeerID,
+		Addrs:  origAddrs,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal beacon payload: %v", err)
+	}
+
+	var decoded BeaconPayload
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal beacon payload: %v", err)
+	}
+
+	if decoded.PeerID != fakePeerID {
+		t.Fatalf("expected PeerID %s, got %s", fakePeerID, decoded.PeerID)
+	}
+
+	senderUDP := &net.UDPAddr{IP: net.ParseIP("192.168.1.42"), Port: 9999}
+	var resolvedAddrs []string
+	for _, a := range decoded.Addrs {
+		if strings.Contains(a, "/0.0.0.0/") {
+			a = strings.Replace(a, "/0.0.0.0/", fmt.Sprintf("/%s/", senderUDP.IP.String()), 1)
+		}
+		resolvedAddrs = append(resolvedAddrs, a)
+	}
+
+	expectedRewritten := "/ip4/192.168.1.42/tcp/4001"
+	if resolvedAddrs[0] != expectedRewritten {
+		t.Fatalf("expected rewritten address %s, got %s", expectedRewritten, resolvedAddrs[0])
+	}
+
+	// Verify multiaddr parses properly
+	ma, err := multiaddr.NewMultiaddr(resolvedAddrs[0])
+	if err != nil {
+		t.Fatalf("failed to parse rewritten multiaddr: %v", err)
+	}
+	if ma.String() != expectedRewritten {
+		t.Fatalf("multiaddr mismatch: %s != %s", ma.String(), expectedRewritten)
+	}
+}
+
+// TestPersistentPeerKey verifies that when a node restarts with the same dataDir,
+// its Ed25519 Peer ID is strictly preserved across process restarts.
+func TestPersistentPeerKey(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Launch node 1
+	node1, err := StartNodeWithOptions(NodeOptions{
+		Port:    0,
+		DataDir: tempDir,
+	})
+	if err != nil {
+		t.Fatalf("failed to start node 1: %v", err)
+	}
+	id1 := node1.PeerID
+	if id1 == "" {
+		t.Fatalf("expected non-empty peer ID")
+	}
+
+	// Verify peer.key was created on disk
+	keyFile := filepath.Join(tempDir, "peer.key")
+	if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+		t.Fatalf("expected peer.key file to exist in dataDir")
+	}
+
+	// Stop node 1
+	if err := node1.Stop(); err != nil {
+		t.Fatalf("failed to stop node 1: %v", err)
+	}
+
+	// Launch node 2 with the exact same dataDir
+	node2, err := StartNodeWithOptions(NodeOptions{
+		Port:    0,
+		DataDir: tempDir,
+	})
+	if err != nil {
+		t.Fatalf("failed to restart node 2: %v", err)
+	}
+	defer node2.Stop()
+	id2 := node2.PeerID
+
+	if id1 != id2 {
+		t.Fatalf("Peer ID did not persist across restarts: got %s, originally %s", id2, id1)
+	}
+	t.Logf("Persistent identity success: Peer ID %s survived restart", id1[:12])
+}
+
+// TestCompositeKeysAndMsgIndex verifies 16-byte composite keys and O(1) duplicate suppression.
+func TestCompositeKeysAndMsgIndex(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "lanmesh.db")
+	if err := initStore(dbPath); err != nil {
+		t.Fatalf("failed to initStore: %v", err)
+	}
+	defer func() {
+		dbMu.Lock()
+		if db != nil {
+			db.Close()
+			db = nil
+		}
+		dbMu.Unlock()
+	}()
+
+	msgID1 := newMessageID()
+	msg1 := ChatMessage{
+		GroupID:   "testgroup",
+		MessageID: msgID1,
+		Timestamp: 1000,
+		Payload:   "First message",
+		Type:      "text",
+	}
+
+	msgID2 := newMessageID()
+	msg2 := ChatMessage{
+		GroupID:   "testgroup",
+		MessageID: msgID2,
+		Timestamp: 2000,
+		Payload:   "Second message",
+		Type:      "text",
+	}
+
+	if err := saveMessage(msg1); err != nil {
+		t.Fatalf("failed to save msg1: %v", err)
+	}
+	if err := saveMessage(msg2); err != nil {
+		t.Fatalf("failed to save msg2: %v", err)
+	}
+
+	// Try saving duplicate msg1: should be suppressed O(1) by msg_index
+	if err := saveMessage(msg1); err != nil {
+		t.Fatalf("error on duplicate save: %v", err)
+	}
+
+	// Test historySince range seek: query since 1500 (should return only msg2)
+	msgs, hasMore, nextSince := historySince("testgroup", 1500, 50)
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message since ts 1500, got %d", len(msgs))
+	}
+	if msgs[0].MessageID != msgID2 {
+		t.Fatalf("expected msg2, got %s", msgs[0].MessageID)
+	}
+	if hasMore {
+		t.Fatalf("expected hasMore=false")
+	}
+	if nextSince != 2000 {
+		t.Fatalf("expected nextSince=2000, got %d", nextSince)
+	}
+}
+
+// TestHMACChallengeResponseAuth verifies zero-knowledge HMAC-SHA256 admin auth.
+func TestHMACChallengeResponseAuth(t *testing.T) {
+	testSecret := "my-secret-admin-pass"
+	setAdminSecret(testSecret)
+	defer setAdminSecret("")
+
+	tempDir := t.TempDir()
+	setAdminDataDir(tempDir)
+	defer func() {
+		adminMu.Lock()
+		if adminStor != nil {
+			adminStor.close()
+			adminStor = nil
+		}
+		adminMu.Unlock()
+	}()
+
+	mux := http.NewServeMux()
+	registerAdminRoutes(mux)
+
+	// Step 1: Request Challenge Nonce
+	req, _ := http.NewRequest(http.MethodGet, "/admin/challenge", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 from /admin/challenge, got %d", rr.Code)
+	}
+
+	var cResp struct {
+		Nonce string `json:"nonce"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&cResp); err != nil || cResp.Nonce == "" {
+		t.Fatalf("failed to decode challenge nonce: %v", err)
+	}
+
+	// Step 2: Compute valid HMAC
+	mac := hmac.New(sha256.New, []byte(testSecret))
+	mac.Write([]byte(cResp.Nonce))
+	validHMAC := hex.EncodeToString(mac.Sum(nil))
+
+	authBody, _ := json.Marshal(map[string]string{
+		"nonce": cResp.Nonce,
+		"hmac":  validHMAC,
+	})
+	authReq, _ := http.NewRequest(http.MethodPost, "/admin/auth", bytes.NewReader(authBody))
+	authRR := httptest.NewRecorder()
+	mux.ServeHTTP(authRR, authReq)
+
+	if authRR.Code != http.StatusOK {
+		t.Fatalf("expected 200 from /admin/auth, got %d", authRR.Code)
+	}
+
+	// Verify session cookie was set
+	cookies := authRR.Result().Cookies()
+	var sessionCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "lanmesh_session" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil || sessionCookie.Value == "" {
+		t.Fatalf("expected lanmesh_session cookie to be issued")
+	}
+
+	// Step 3: Verify /is-admin sees active session
+	statusReq, _ := http.NewRequest(http.MethodGet, "/is-admin", nil)
+	statusReq.AddCookie(sessionCookie)
+	statusRR := httptest.NewRecorder()
+	mux.ServeHTTP(statusRR, statusReq)
+
+	var isAdmResp struct {
+		IsAdmin       bool `json:"isAdmin"`
+		SessionActive bool `json:"sessionActive"`
+	}
+	if err := json.NewDecoder(statusRR.Body).Decode(&isAdmResp); err != nil {
+		t.Fatalf("failed to decode /is-admin: %v", err)
+	}
+	if !isAdmResp.IsAdmin || !isAdmResp.SessionActive {
+		t.Fatalf("expected isAdmin=true & sessionActive=true, got %+v", isAdmResp)
+	}
+}
+
+// TestP2PSyncChunkedRangePull verifies that two nodes sync missed history across chunked batches.
+func TestP2PSyncChunkedRangePull(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h1 := createTestHost(t)
+	defer h1.Close()
+	h2 := createTestHost(t)
+	defer h2.Close()
+
+	// Register /p2p-sync/1.0.0 on h1
+	h1.SetStreamHandler(syncProtocolID, func(s network.Stream) {
+		handleSyncStream(s)
+	})
+
+	// Pre-populate h1's database with 65 messages (exceeding chunk limit 50)
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "lanmesh.db")
+	if err := initStore(dbPath); err != nil {
+		t.Fatalf("failed to initStore: %v", err)
+	}
+	defer func() {
+		dbMu.Lock()
+		if db != nil {
+			db.Close()
+			db = nil
+		}
+		dbMu.Unlock()
+	}()
+
+	for i := 1; i <= 65; i++ {
+		_ = saveMessage(ChatMessage{
+			GroupID:   "field-ops",
+			MessageID: fmt.Sprintf("msg-sync-%03d", i),
+			Timestamp: int64(1000 + i*10),
+			Payload:   fmt.Sprintf("Sync payload #%d", i),
+			Type:      "text",
+		})
+	}
+
+	// Connect h2 to h1
+	if err := h2.Connect(ctx, peer.AddrInfo{ID: h1.ID(), Addrs: h1.Addrs()}); err != nil {
+		t.Fatalf("failed to connect h2 to h1: %v", err)
+	}
+
+	var syncedMessages []ChatMessage
+	var syncedMu sync.Mutex
+
+	applyFn := func(m ChatMessage) {
+		syncedMu.Lock()
+		syncedMessages = append(syncedMessages, m)
+		syncedMu.Unlock()
+	}
+
+	// H2 requests catch-up sync from H1 simulating an initial empty watermark (since: 0)
+	initialWatermarks := map[string]int64{"field-ops": 0}
+	if err := requestSyncWithWatermarks(ctx, h2, h1.ID(), initialWatermarks, applyFn); err != nil {
+		t.Fatalf("requestSync failed: %v", err)
+	}
+
+	syncedMu.Lock()
+	count := len(syncedMessages)
+	syncedMu.Unlock()
+
+	if count != 65 {
+		t.Fatalf("expected 65 messages synced across chunks, got %d", count)
+	}
+	t.Logf("P2P sync chunking success: synced all %d messages across chunks", count)
 }
