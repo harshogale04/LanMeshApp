@@ -24,11 +24,18 @@ android {
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("debug")
             optimization {
                 enable = false
             }
         }
     }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

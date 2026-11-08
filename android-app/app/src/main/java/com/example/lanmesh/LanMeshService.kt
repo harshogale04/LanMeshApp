@@ -78,7 +78,15 @@ class LanMeshService : Service() {
             return START_NOT_STICKY
         }
 
-        startForeground(NOTIF_ID, buildNotification("Starting..."))
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            startForeground(
+                NOTIF_ID,
+                buildNotification("Starting..."),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(NOTIF_ID, buildNotification("Starting..."))
+        }
         acquireLocks()
 
         if (worker?.isAlive == true) return START_STICKY

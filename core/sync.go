@@ -18,12 +18,17 @@ import (
 const (
 	syncProtocolID     = "/p2p-sync/1.0.0"
 	legacySyncProtocol = "/p2p-chat-sync/1.0.0"
-	syncCooldown       = 45 * time.Second
-	syncStreamTimeout  = 20 * time.Second
-	syncChunkLimit     = 50
+
+	// syncCooldown enforces a 45-second debounce window per peer,
+	// preventing connection-flapping sync storms.
+	syncCooldown      = 45 * time.Second
+	syncStreamTimeout = 20 * time.Second
+	syncChunkLimit    = 50
 )
 
-var syncSem = make(chan struct{}, 2) // Semaphore: max 2 concurrent sync streams
+// syncSem limits simultaneous active sync streams (initiator and responder
+// combined) to 2, preventing CPU, disk, and Wi-Fi interface saturation.
+var syncSem = make(chan struct{}, 2)
 
 // SyncEnvelope wraps typed JSON messages over /p2p-sync/1.0.0 streams.
 type SyncEnvelope struct {
@@ -60,6 +65,15 @@ type PullResponse struct {
 // handleSyncStream serves the responder side of /p2p-sync/1.0.0.
 func handleSyncStream(s network.Stream) {
 	defer s.Close()
+
+	// Bound concurrent sync streams: reject (don't queue) when saturated
+	select {
+	case syncSem <- struct{}{}:
+		defer func() { <-syncSem }()
+	default:
+		return
+	}
+
 	_ = s.SetDeadline(time.Now().Add(syncStreamTimeout))
 
 	dec := json.NewDecoder(s)
@@ -222,12 +236,11 @@ func requestSyncWithWatermarks(ctx context.Context, host libp2phost.Host, target
 				return err
 			}
 
-			if len(pResp.Messages) > 0 {
-				// Single-transaction batch disk commit
-				_ = saveBatch(pResp.Messages)
-				for _, msg := range pResp.Messages {
-					applyFn(msg)
-				}
+			// applyFn persists each message (deduped), notifies the UI, and
+			// announces newly discovered groups. Synced history is NOT
+			// re-relayed to the mesh (zero live-relay echo).
+			for _, msg := range pResp.Messages {
+				applyFn(msg)
 			}
 
 			if !pResp.HasMore || len(pResp.Messages) == 0 {
@@ -247,20 +260,19 @@ func requestSyncWithWatermarks(ctx context.Context, host libp2phost.Host, target
 // ---------------------------------------------------------------------
 
 type syncNotifee struct {
-	ctx      context.Context
-	host     libp2phost.Host
-	applyFn  func(ChatMessage)
-	isAdmin  func() bool
+	ctx     context.Context
+	host    libp2phost.Host
+	applyFn func(ChatMessage)
+
 	mu       sync.Mutex
 	lastSync map[peer.ID]time.Time
 }
 
-func newSyncNotifee(ctx context.Context, host libp2phost.Host, applyFn func(ChatMessage), isAdmin func() bool) *syncNotifee {
+func newSyncNotifee(ctx context.Context, host libp2phost.Host, applyFn func(ChatMessage)) *syncNotifee {
 	return &syncNotifee{
 		ctx:      ctx,
 		host:     host,
 		applyFn:  applyFn,
-		isAdmin:  isAdmin,
 		lastSync: make(map[peer.ID]time.Time),
 	}
 }
@@ -277,14 +289,15 @@ func (n *syncNotifee) shouldSync(p peer.ID) bool {
 
 func (n *syncNotifee) Connected(_ network.Network, c network.Conn) {
 	p := c.RemotePeer()
-	if !n.shouldSync(p) {
+
+	// Glare prevention: the peer with the smaller Peer ID initiates sync, so
+	// normally exactly one sync stream is opened per pair of nodes. An admin
+	// node always initiates so the audit log catches up from every peer.
+	isInitiator := IsAdminNode() || n.host.ID() < p
+	if !isInitiator {
 		return
 	}
-
-	// Tie-breaking: the peer with smaller Peer ID initiates sync, or an admin node always initiates.
-	// This ensures exactly 1 sync stream is opened between any pair of nodes.
-	isInitiator := n.isAdmin() || (n.host.ID() < p)
-	if !isInitiator {
+	if !n.shouldSync(p) {
 		return
 	}
 

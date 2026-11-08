@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	"github.com/multiformats/go-multiaddr"
+	bolt "go.etcd.io/bbolt"
 )
 
 //go:embed static/index.html
@@ -37,15 +39,24 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// Node is a running LANMESH instance. Callers (desktop CLI or the
-// mobile bridge) get one back from StartNode and call Stop() to tear
-// everything down cleanly — this replaces the old main()'s pattern of
-// log.Fatal on any startup error and running forever, since a mobile
-// host process must never be killed by a library call failing, and
-// must be stoppable on command (e.g. the Android foreground service
-// being told to shut down).
+type NodeConfig struct {
+	Port        int
+	P2PPort     int
+	Nickname    string
+	DataDir     string
+	AdminSecret string
+	NoBrowser   bool
+}
+
+// NodeOptions is the startup configuration for a LANMESH daemon node.
+// It is an alias of NodeConfig so both names keep working.
+type NodeOptions = NodeConfig
+
+// Node is a running LANMESH instance.
 type Node struct {
 	PeerID     string
+	Nickname   string
+	IsAdmin    bool
 	httpServer *http.Server
 	cancel     context.CancelFunc
 	ctx        context.Context
@@ -54,10 +65,60 @@ type Node struct {
 	beacon     *BeaconManager
 }
 
-// ConnectToPeer dials another LANMESH node directly, bypassing mDNS
-// discovery. addr must be a full multiaddr including the peer ID, e.g.
-// "/ip4/192.168.1.5/tcp/45343/p2p/12D3KooW...". Use this when mDNS is
-// blocked by network isolation (hotspots, campus Wi-Fi).
+type peerRosterInfo struct {
+	Nickname string `json:"nickname"`
+	Seen     int64  `json:"seen"`
+}
+
+var (
+	rosterMu sync.RWMutex
+	roster   = make(map[string]peerRosterInfo)
+)
+
+func updateRoster(peerID, nickname string) {
+	if peerID == "" {
+		return
+	}
+	rosterMu.Lock()
+	defer rosterMu.Unlock()
+	entry := roster[peerID]
+	if nickname != "" {
+		entry.Nickname = nickname
+	}
+	entry.Seen = time.Now().UnixMilli()
+	roster[peerID] = entry
+}
+
+func getRosterSnapshot() map[string]peerRosterInfo {
+	rosterMu.RLock()
+	defer rosterMu.RUnlock()
+	cp := make(map[string]peerRosterInfo, len(roster))
+	for k, v := range roster {
+		cp[k] = v
+	}
+	return cp
+}
+
+func loadOrGenerateKey(keyPath string) (crypto.PrivKey, error) {
+	if data, err := os.ReadFile(keyPath); err == nil {
+		priv, err := crypto.UnmarshalPrivateKey(data)
+		if err == nil {
+			return priv, nil
+		}
+	}
+	priv, _, err := crypto.GenerateEd25519Key(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	data, err := crypto.MarshalPrivateKey(priv)
+	if err != nil {
+		return nil, err
+	}
+	_ = os.WriteFile(keyPath, data, 0600)
+	return priv, nil
+}
+
+// ConnectToPeer dials another LANMESH node directly, bypassing mDNS discovery.
 func (n *Node) ConnectToPeer(addr string) error {
 	log.Printf("[LANMESH] ConnectToPeer manual/QR input address: %s", addr)
 
@@ -75,7 +136,6 @@ func (n *Node) ConnectToPeer(addr string) error {
 		return fmt.Errorf("cannot connect to self (%s)", info.ID.String()[:8])
 	}
 
-	// Filter out any loopback or unroutable wildcard addresses from the target info
 	var cleanAddrs []multiaddr.Multiaddr
 	for _, a := range info.Addrs {
 		s := a.String()
@@ -95,12 +155,8 @@ func (n *Node) ConnectToPeer(addr string) error {
 		Addrs: cleanAddrs,
 	}
 
-	// Clear any stale addresses from peerstore before adding the verified addresses
 	n.host.Peerstore().ClearAddrs(cleanInfo.ID)
 	n.host.Peerstore().AddAddrs(cleanInfo.ID, cleanInfo.Addrs, peerstore.TempAddrTTL)
-
-	beforeAddrs := n.host.Peerstore().Addrs(cleanInfo.ID)
-	log.Printf("[LANMESH] ConnectToPeer: peerstore addresses for %s immediately before dialing: %v", cleanInfo.ID.String()[:8], beforeAddrs)
 
 	ctx, cancel := context.WithTimeout(n.ctx, 10*time.Second)
 	defer cancel()
@@ -108,11 +164,6 @@ func (n *Node) ConnectToPeer(addr string) error {
 	return n.host.Connect(ctx, cleanInfo)
 }
 
-// ListenAddrsString returns this node's own dialable addresses, one per
-// line, each already including "/p2p/<peerID>" so it can be pasted
-// straight into another device's ConnectToPeer. Loopback (127.0.0.1) and
-// wildcard (0.0.0.0) addresses are strictly excluded so they are never
-// shown in QR codes or copied to another physical phone.
 func (n *Node) ListenAddrsString() string {
 	var parts []string
 	for _, a := range n.host.Addrs() {
@@ -163,7 +214,6 @@ func (n *Node) Stop() error {
 	}
 	dbMu.Unlock()
 
-	// Close admin log file
 	adminMu.Lock()
 	if adminStor != nil {
 		if e := adminStor.close(); e != nil && err == nil {
@@ -176,16 +226,8 @@ func (n *Node) Stop() error {
 	return err
 }
 
-// NodeOptions carries startup configuration for a LANMESH daemon node.
-type NodeOptions struct {
-	Port        int
-	P2PPort     int
-	Nickname    string
-	DataDir     string
-	AdminSecret string
-	NoBrowser   bool
-}
-
+// loadOrCreateIdentity loads (or creates and persists) the node's Ed25519
+// identity key from <dataDir>/peer.key, logging if an existing key is corrupted.
 func loadOrCreateIdentity(dataDir string) (crypto.PrivKey, error) {
 	keyPath := filepath.Join(dataDir, "peer.key")
 	if data, err := os.ReadFile(keyPath); err == nil {
@@ -214,7 +256,7 @@ func loadOrCreateIdentity(dataDir string) (crypto.PrivKey, error) {
 
 // StartNode brings up one LANMESH node with default options.
 func StartNode(port int, dataDir string) (*Node, error) {
-	return StartNodeWithOptions(NodeOptions{
+	return StartNodeWithConfig(NodeConfig{
 		Port:    port,
 		DataDir: dataDir,
 	})
@@ -222,39 +264,37 @@ func StartNode(port int, dataDir string) (*Node, error) {
 
 // StartNodeWithOptions brings up one LANMESH node according to NodeOptions.
 func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
-	port := opts.Port
-	dataDir := opts.DataDir
-	if dataDir == "" {
-		dataDir = "./lanmesh-data"
+	return StartNodeWithConfig(opts)
+}
+
+func StartNodeWithConfig(cfg NodeConfig) (*Node, error) {
+	if cfg.DataDir == "" {
+		cfg.DataDir = "./lanmesh-data"
 	}
-	if err := ensureDir(dataDir); err != nil {
+	if err := ensureDir(cfg.DataDir); err != nil {
 		return nil, fmt.Errorf("failed to create data dir: %w", err)
 	}
-	setAdminDataDir(dataDir)
 
-	adminSecret := opts.AdminSecret
-	if adminSecret == "" {
-		adminSecret = os.Getenv("LANMESH_ADMIN_SECRET")
+	// Admin secret precedence: explicit config > LANMESH_ADMIN_SECRET env > <dataDir>/admin.secret
+	if cfg.AdminSecret == "" {
+		cfg.AdminSecret = strings.TrimSpace(os.Getenv("LANMESH_ADMIN_SECRET"))
 	}
-	if adminSecret != "" {
-		setAdminSecret(adminSecret)
-		if _, err := enableAdminLogging(); err != nil {
-			log.Printf("[LANMESH-ADMIN] Warning: failed to enable boot-time admin logging: %v", err)
-		} else {
-			log.Printf("[LANMESH-ADMIN] Boot-time authoritative admin node active")
+	if cfg.AdminSecret == "" {
+		if secretData, err := os.ReadFile(filepath.Join(cfg.DataDir, "admin.secret")); err == nil {
+			cfg.AdminSecret = strings.TrimSpace(string(secretData))
 		}
 	}
-
+	SetAdminConfig(cfg.AdminSecret, cfg.DataDir, cfg.Nickname)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	dbPath := filepath.Join(dataDir, "lanmesh.db")
+	dbPath := filepath.Join(cfg.DataDir, "lanmesh.db")
 	if err := initStore(dbPath); err != nil {
 		cancel()
 		return nil, err
 	}
 
 	// Persist / load Ed25519 identity key
-	privKey, err := loadOrCreateIdentity(dataDir)
+	privKey, err := loadOrCreateIdentity(cfg.DataDir)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -264,47 +304,58 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 	// client isolation, and consumer routers, causing silent 8-second dial
 	// timeouts before the stack gives up. TCP is more reliably traversable
 	// on typical LAN/hotspot setups.
-	listenPort := 0
-	if opts.P2PPort > 0 {
-		listenPort = opts.P2PPort
-	}
-	listenAddrs := []string{
-		fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", listenPort),
+	p2pListenPort := 0
+	if cfg.P2PPort > 0 {
+		p2pListenPort = cfg.P2PPort
 	}
 
-	host, err := libp2p.New(
+	var opts []libp2p.Option
+	opts = append(opts,
 		libp2p.Identity(privKey),
-		libp2p.ListenAddrStrings(listenAddrs...),
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", p2pListenPort)),
+	)
+
+	opts = append(opts,
 		libp2p.Security(tls.ID, tls.New),
 		libp2p.AddrsFactory(filterAndExpandAddrs),
 	)
+
+	host, err := libp2p.New(opts...)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 
-	// Diagnostic: log PeerID, actual kernel listening sockets, and advertised addresses at startup.
-	// On Android these appear in logcat under tag "GoLog".
 	log.Printf("[LANMESH] PeerID: %s", host.ID().String())
 	for _, la := range host.Network().ListenAddresses() {
 		log.Printf("[LANMESH] Bound listening socket: %s", la.String())
 	}
-	if addrs := host.Addrs(); len(addrs) == 0 {
-		log.Printf("[LANMESH] WARNING: no advertised addresses — peers cannot dial us")
-	} else {
-		for _, a := range addrs {
-			log.Printf("[LANMESH] Advertising: %s/p2p/%s", a.String(), host.ID().String())
-		}
+	for _, a := range host.Addrs() {
+		log.Printf("[LANMESH] Advertising: %s/p2p/%s", a.String(), host.ID().String())
 	}
 
 	h := newHub()
 	nodeSeen := newSeenCache(5000)
 
+	// If this node is an authoritative admin node, activate audit logging and backfill immediately
+	if IsAdminNode() {
+		if store, err := enableAdminLogging(); err != nil {
+			log.Printf("[LANMESH-ADMIN] Warning: failed to enable boot-time admin logging: %v", err)
+		} else if store != nil {
+			log.Printf("[LANMESH-ADMIN] Boot-time authoritative admin node active")
+			dbMu.RLock()
+			currentDB := db
+			dbMu.RUnlock()
+			if currentDB != nil {
+				_ = store.backfillFromDB(currentDB)
+			}
+		}
+	}
+
 	host.SetStreamHandler(protocolID, func(s network.Stream) {
 		defer s.Close()
 		remote := s.Conn().RemotePeer()
 
-		// Limit incoming envelope size to 2MB to prevent unbounded memory allocation
 		var msg ChatMessage
 		data, err := io.ReadAll(io.LimitReader(s, 2*1024*1024))
 		if err != nil {
@@ -314,19 +365,15 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 			return
 		}
 
-		// Signaling separation: call signals must NEVER be accepted, recorded,
-		// or relayed over the chat protocol.
 		if isCallSignal(msg.Type) {
 			log.Printf("[LANMESH] Rejected call signaling type %q on chat protocol %s", msg.Type, protocolID)
 			return
 		}
 
-		// Deduplicate and suppress loops
 		if msg.MessageID == "" || nodeSeen.markSeen(msg.MessageID) {
 			return
 		}
 
-		// Validate original sender peer ID
 		if msg.Sender == "" {
 			return
 		}
@@ -335,28 +382,34 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 			return
 		}
 
-		// Hop limit enforcement:
-		// Over the wire, any valid message must have 1 <= Hops <= maxHops (6).
-		// Hops < 1 indicates unincremented/spoofed origin; Hops > maxHops exceeds the 6-hop boundary.
+		// Over the wire: 1 <= Hops <= maxHops (6)
 		if msg.Hops < 1 || msg.Hops > maxHops {
 			log.Printf("[LANMESH] Dropped message with out-of-bounds hops (%d, max %d)", msg.Hops, maxHops)
 			return
 		}
 
-		// Direct hop origin validation:
-		// If Hops == 1 (direct neighbor), the transport-level remote peer must match msg.Sender.
 		if msg.Hops == 1 && remote.String() != msg.Sender {
 			log.Printf("[LANMESH] Dropped spoofed direct message: remote %s != sender %s", remote.String()[:8], msg.Sender[:8])
 			return
 		}
 
+		if len(msg.HopTrail) == 0 {
+			msg.HopTrail = []string{msg.Sender}
+		}
+
 		stats.record(msg.Hops)
+		updateRoster(msg.Sender, msg.Nickname)
+
+		if msg.Type == "ping" {
+			h.broadcast(msg)
+			relayToPeers(ctx, host, remote, msg)
+			return
+		}
+
 		if err := saveMessage(msg); err != nil {
 			log.Println("failed to persist incoming message:", err)
 		}
 		h.broadcast(msg)
-		// Multi-hop mesh forwarding: all connected mesh nodes forward messages
-		// towards other peers (up to maxHops=6), not just admin!
 		relayToPeers(ctx, host, remote, msg)
 		if store := currentAdminStore(); store != nil {
 			store.record(msg)
@@ -372,6 +425,7 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 		}
 		wasNewGroup := !groupKnownLocally(msg.GroupID)
 		stats.record(msg.Hops)
+		updateRoster(msg.Sender, msg.Nickname)
 		if err := saveMessage(msg); err != nil {
 			log.Println("failed to persist backfilled message:", err)
 		}
@@ -383,6 +437,7 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 				GroupID: msg.GroupID,
 			})
 		}
+		// Zero Live-Relay Echo: Synced historical messages are NOT forwarded with relayToPeers
 		if store := currentAdminStore(); store != nil {
 			store.record(msg)
 		}
@@ -395,28 +450,7 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 		handleSyncStream(s)
 	})
 
-	host.Network().Notify(newSyncNotifee(ctx, host, applyBackfill, isNetworkAdmin))
-
-	// Periodic admin presence self-ping (20s) to keep admin node active in rosters
-	if isNetworkAdmin() {
-		go func() {
-			ticker := time.NewTicker(20 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					h.broadcast(ChatMessage{
-						Type:      "ping",
-						Sender:    host.ID().String(),
-						Nickname:  "Admin-HQ",
-						Timestamp: time.Now().UnixMilli(),
-					})
-				}
-			}
-		}()
-	}
+	host.Network().Notify(newSyncNotifee(ctx, host, applyBackfill))
 
 	// Direct call signaling handler.
 	// Delivers call signals to this device's connected WebSocket clients
@@ -436,14 +470,6 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 			return
 		}
 
-		remoteShort := s.Conn().RemotePeer().String()
-		if len(remoteShort) > 8 {
-			remoteShort = remoteShort[:8]
-		}
-		log.Printf("[LANMESH-CALL] Incoming %s from %s (group: %q)", msg.Type, remoteShort, msg.GroupID)
-
-		// Deliver straight to this device's own UI only — see isCallSignal's
-		// comment for why this never touches saveMessage/stats/relayToPeers.
 		h.broadcast(msg)
 	})
 
@@ -452,7 +478,6 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 		go func() {
 			t := time.NewTicker(10 * time.Second)
 			defer t.Stop()
-
 			for {
 				select {
 				case <-ctx.Done():
@@ -471,18 +496,68 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 		log.Printf("[LANMESH] mDNS discovery started successfully")
 	}
 
-	// Peer Exchange: gossip known peer multiaddresses over direct connections.
-	// Fixes Android hotspot mDNS multicast isolation: when Phone A connects to
-	// Phone B via QR code, they exchange peer tables so each can learn and dial
-	// Phone C (who they didn't know via mDNS).
 	setupPEX(ctx, host)
 
 	// UDP LAN Broadcast Beacon (:9999): robust fallback discovery for Android
 	// API 30+ where SELinux sandbox blocks netlink route-table inspection.
 	beaconMgr, _ := startBeaconEngine(ctx, host)
 
+	// Automated Admin Presence Self-Ping: broadcast a ping frame every 20 seconds
+	// to keep the admin node active in rosters across the mesh
+	if IsAdminNode() {
+		go func() {
+			ticker := time.NewTicker(20 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					pingMsg := ChatMessage{
+						Type:      "ping",
+						Payload:   "admin-ping",
+						Sender:    host.ID().String(),
+						Nickname:  GetDefaultNickname(),
+						GroupID:   "general",
+						MessageID: newMessageID(),
+						Hops:      0,
+						HopTrail:  []string{host.ID().String()},
+						Timestamp: time.Now().UnixMilli(),
+					}
+					nodeSeen.markSeen(pingMsg.MessageID)
+					markSeen(pingMsg.MessageID)
+					h.broadcast(pingMsg)
+					relayToPeers(ctx, host, "", pingMsg)
+				}
+			}
+		}()
+	}
+
 	mux := http.NewServeMux()
-	registerAdminRoutes(mux)
+
+	broadcastAll := func(msg ChatMessage) {
+		msg.Sender = host.ID().String()
+		if msg.Nickname == "" {
+			msg.Nickname = GetDefaultNickname()
+		}
+		msg.Hops = 0
+		msg.HopTrail = []string{host.ID().String()}
+		msg.Timestamp = time.Now().UnixMilli()
+		nodeSeen.markSeen(msg.MessageID)
+		markSeen(msg.MessageID)
+		_ = saveMessage(msg)
+		h.broadcast(msg)
+		relayToPeers(ctx, host, "", msg)
+		if store := currentAdminStore(); store != nil {
+			store.record(msg)
+		}
+	}
+
+	registerAdminRoutes(mux, broadcastAll, func() *bolt.DB {
+		dbMu.RLock()
+		defer dbMu.RUnlock()
+		return db
+	})
 
 	staticSub, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -494,7 +569,6 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 
 	mux.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-
 		type peerInfo struct {
 			ID        string   `json:"id"`
 			Addrs     []string `json:"addrs"`
@@ -509,16 +583,61 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 			latMs := host.Peerstore().LatencyEWMA(p).Milliseconds()
 			peerList = append(peerList, peerInfo{ID: p.String(), Addrs: addrStrs, LatencyMs: latMs})
 		}
-
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"self":  host.ID().String(),
 			"peers": peerList,
 		})
 	})
 
-	// /debug/addrs returns our own advertised multiaddresses (after filterAndExpandAddrs).
-	// Use: curl http://localhost:9000/debug/addrs from adb shell or phone browser.
-	// Confirms whether the phone is advertising a real LAN IP or 0.0.0.0.
+	// GET /groups: returns all known group channels
+	mux.HandleFunc("/groups", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"groups": knownGroups(),
+		})
+	})
+
+	// GET /history: paginated message history using O(log N) cursor seek
+	mux.HandleFunc("/history", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		groupID := r.URL.Query().Get("group")
+		if groupID == "" {
+			groupID = "general"
+		}
+		limit := 50
+		if lStr := r.URL.Query().Get("limit"); lStr != "" {
+			if parsed, err := strconv.Atoi(lStr); err == nil && parsed > 0 {
+				limit = parsed
+			}
+		}
+		var sinceMs int64 = 0
+		if sStr := r.URL.Query().Get("since"); sStr != "" {
+			if parsed, err := strconv.ParseInt(sStr, 10, 64); err == nil {
+				sinceMs = parsed
+			}
+		}
+
+		msgs, hasMore, nextSince := historySince(groupID, sinceMs, limit)
+		if msgs == nil {
+			msgs = []ChatMessage{}
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"group":     groupID,
+			"messages":  msgs,
+			"hasMore":   hasMore,
+			"nextSince": nextSince,
+		})
+	})
+
+	// GET /presence: live roster snapshot (nicknames and last-seen from received traffic)
+	mux.HandleFunc("/presence", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"self":   host.ID().String(),
+			"roster": getRosterSnapshot(),
+		})
+	})
+
 	mux.HandleFunc("/debug/addrs", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		addrStrs := make([]string, 0)
@@ -531,11 +650,6 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 		})
 	})
 
-	// /connect accepts a POST with JSON {"addr": "<full multiaddr including /p2p/peerID>"} and
-	// triggers an immediate libp2p dial to the specified peer. This is useful for:
-	//  - Testing two nodes on the same machine (same LAN IP, different HTTP ports — the
-	//    SubnetScanner cannot distinguish them since it scans by IP only).
-	//  - Manual pairing via QR code or copy-paste when mDNS is blocked.
 	mux.HandleFunc("/connect", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST required", http.StatusMethodNotAllowed)
@@ -584,10 +698,8 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-
 		messagesSeen, maxHops, lastActivity := stats.snapshot()
 		lastActivitySecs := -1.0
-
 		if !lastActivity.IsZero() {
 			lastActivitySecs = time.Since(lastActivity).Seconds()
 		}
@@ -601,102 +713,8 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 		})
 	})
 
-	// GET /groups: returns all known group channels
-	mux.HandleFunc("/groups", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"groups": knownGroups(),
-		})
-	})
-
-	// GET /history: paginated message history using O(log N) cursor seek
-	mux.HandleFunc("/history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		groupID := r.URL.Query().Get("group")
-		if groupID == "" {
-			groupID = "general"
-		}
-		limit := 50
-		if lStr := r.URL.Query().Get("limit"); lStr != "" {
-			if l, err := strconv.Atoi(lStr); err == nil && l > 0 {
-				limit = l
-			}
-		}
-		var sinceMs int64 = 0
-		if sStr := r.URL.Query().Get("since"); sStr != "" {
-			if s, err := strconv.ParseInt(sStr, 10, 64); err == nil {
-				sinceMs = s
-			}
-		}
-
-		msgs, hasMore, nextSince := historySince(groupID, sinceMs, limit)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"group":     groupID,
-			"messages":  msgs,
-			"hasMore":   hasMore,
-			"nextSince": nextSince,
-		})
-	})
-
-	// GET /presence: live roster snapshot
-	mux.HandleFunc("/presence", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		roster := make(map[string]interface{})
-		for _, p := range host.Network().Peers() {
-			roster[p.String()] = map[string]interface{}{
-				"nickname": p.String()[:8],
-				"seen":     time.Now().UnixMilli(),
-			}
-		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"self":   host.ID().String(),
-			"roster": roster,
-		})
-	})
-
-	// POST /admin/groups: authenticated mesh-wide group creation
-	mux.HandleFunc("/admin/groups", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "POST required", http.StatusMethodNotAllowed)
-			return
-		}
-		if !isSessionAuthenticated(r) {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-		var req struct {
-			GroupName string `json:"groupName"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.GroupName == "" {
-			http.Error(w, "groupName required", http.StatusBadRequest)
-			return
-		}
-		cleanGroup := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(req.GroupName, "#")))
-		announceMsg := ChatMessage{
-			Type:      "group_announce",
-			Payload:   cleanGroup,
-			GroupID:   cleanGroup,
-			Sender:    host.ID().String(),
-			MessageID: newMessageID(),
-			Timestamp: time.Now().UnixMilli(),
-		}
-		_ = saveMessage(announceMsg)
-		h.broadcast(announceMsg)
-		relayToPeers(ctx, host, "", announceMsg)
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"created": cleanGroup})
-	})
-
 	// WS /signal: dedicated WebRTC signaling endpoint isolated from chat
-	mux.HandleFunc("/signal", func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Println("[LANMESH-SIGNAL] WebSocket upgrade failed:", err)
-			return
-		}
-		defer conn.Close()
-
+	handleSignalConn := func(conn *wsConn) {
 		h.add(conn)
 		defer h.remove(conn)
 
@@ -707,28 +725,50 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 			}
 			if isCallSignal(msg.Type) {
 				msg.Sender = host.ID().String()
+				msg.Timestamp = time.Now().UnixMilli()
 				if msg.To == "" {
 					// Room broadcast
-					for _, p := range host.Network().Peers() {
-						go func(target peer.ID) {
-							sctx, scancel := context.WithTimeout(ctx, 5*time.Second)
-							defer scancel()
-							_ = sendDirect(sctx, host, target, msg)
-						}(p)
-					}
-				} else {
-					// 1:1 call signal
-					targetID, err := peer.Decode(msg.To)
+					connectedPeers := host.Network().Peers()
+					data, err := json.Marshal(msg)
 					if err == nil {
-						go func() {
-							sctx, scancel := context.WithTimeout(ctx, 8*time.Second)
-							defer scancel()
-							_ = sendDirect(sctx, host, targetID, msg)
-						}()
+						for _, p := range connectedPeers {
+							go func(target peer.ID) {
+								sctx, scancel := context.WithTimeout(ctx, 5*time.Second)
+								defer scancel()
+								stream, err := host.NewStream(sctx, target, callProtocolID)
+								if err != nil {
+									return
+								}
+								defer stream.Close()
+								if _, err := stream.Write(data); err != nil {
+									stream.Reset()
+								}
+							}(p)
+						}
 					}
+					continue
 				}
+
+				// 1:1 call signal
+				targetID, err := peer.Decode(msg.To)
+				if err != nil {
+					continue
+				}
+				sctx, scancel := context.WithTimeout(ctx, 8*time.Second)
+				_ = sendDirect(sctx, host, targetID, msg)
+				scancel()
 			}
 		}
+	}
+
+	mux.HandleFunc("/signal", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println("[LANMESH-SIGNAL] WebSocket upgrade failed:", err)
+			return
+		}
+		defer conn.Close()
+		handleSignalConn(conn)
 	})
 
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -770,15 +810,19 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 				break
 			}
 
+			// Local keepalive heartbeat from webview to keep websocket open
+			if msg.Type == "ping" {
+				conn.WriteJSON(ChatMessage{Type: "pong", Timestamp: time.Now().UnixMilli()})
+				continue
+			}
+
 			msg.Sender = host.ID().String()
 
-			// Handle call signaling before normal chat processing.
+			// Call signaling over /ws
 			if isCallSignal(msg.Type) {
 				msg.Timestamp = time.Now().UnixMilli()
 				if msg.To == "" {
-					// Broadcast room call signal to all directly connected peers
 					connectedPeers := host.Network().Peers()
-					log.Printf("[LANMESH-CALL] Broadcasting %s signal (group: %q, active peers: %d)", msg.Type, msg.GroupID, len(connectedPeers))
 					data, err := json.Marshal(msg)
 					if err == nil {
 						for _, p := range connectedPeers {
@@ -787,13 +831,11 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 								defer scancel()
 								stream, err := host.NewStream(sctx, target, callProtocolID)
 								if err != nil {
-									log.Printf("[LANMESH-CALL] Failed to open broadcast stream to %s: %v", target.String()[:8], err)
 									return
 								}
 								defer stream.Close()
 								if _, err := stream.Write(data); err != nil {
 									stream.Reset()
-									log.Printf("[LANMESH-CALL] Failed to write broadcast to %s: %v", target.String()[:8], err)
 								}
 							}(p)
 						}
@@ -803,22 +845,11 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 
 				targetID, err := peer.Decode(msg.To)
 				if err != nil {
-					log.Println("[LANMESH-CALL] Bad target peer id:", err)
 					continue
 				}
-
-				targetShort := targetID.String()
-				if len(targetShort) > 8 {
-					targetShort = targetShort[:8]
-				}
-				log.Printf("[LANMESH-CALL] Sending %s directly to %s (group: %q)", msg.Type, targetShort, msg.GroupID)
-
 				sctx, scancel := context.WithTimeout(ctx, 8*time.Second)
-				if err := sendDirect(sctx, host, targetID, msg); err != nil {
-					log.Printf("[LANMESH-CALL] Direct signal delivery to %s failed: %v", targetShort, err)
-				}
+				_ = sendDirect(sctx, host, targetID, msg)
 				scancel()
-
 				continue
 			}
 
@@ -828,11 +859,13 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 
 			msg.MessageID = newMessageID()
 			msg.Hops = 0
+			msg.HopTrail = []string{host.ID().String()}
 			msg.Timestamp = time.Now().UnixMilli()
 
 			nodeSeen.markSeen(msg.MessageID)
 			markSeen(msg.MessageID)
 			stats.record(msg.Hops)
+			updateRoster(msg.Sender, msg.Nickname)
 
 			if err := saveMessage(msg); err != nil {
 				log.Println("failed to persist outgoing message:", err)
@@ -847,8 +880,9 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 		}
 	})
 
+	listenPort := cfg.Port
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    fmt.Sprintf(":%d", listenPort),
 		Handler: mux,
 	}
 
@@ -858,11 +892,8 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 		}
 	}()
 
-	// Start SubnetScanner for automatic cold-start peer discovery on local /24 subnets.
-	// Operates over unicast TCP/HTTP so discovery functions even when Android hotspot
-	// blocks client-to-client mDNS multicast.
-	if port > 0 {
-		startSubnetScanner(ctx, host, port)
+	if listenPort > 0 {
+		startSubnetScanner(ctx, host, listenPort)
 	}
 
 	go func() {
@@ -872,6 +903,8 @@ func StartNodeWithOptions(opts NodeOptions) (*Node, error) {
 
 	return &Node{
 		PeerID:     host.ID().String(),
+		Nickname:   GetDefaultNickname(),
+		IsAdmin:    IsAdminNode(),
 		httpServer: srv,
 		cancel:     cancel,
 		ctx:        ctx,
@@ -890,8 +923,6 @@ var (
 	configuredLocalIP   string
 )
 
-// SetLocalIP allows the Android mobile bridge (or CLI) to register the actual
-// local LAN IP address obtained directly from Android's ConnectivityManager.
 func SetLocalIP(ip string) {
 	configuredLocalIPMu.Lock()
 	defer configuredLocalIPMu.Unlock()
@@ -905,13 +936,6 @@ func GetConfiguredLocalIP() string {
 	return configuredLocalIP
 }
 
-// findLANIPs discovers real, dialable IPv4 addresses for the local device.
-// It uses four independent methods to guarantee finding the address even on
-// modern Android versions where netlink queries may be blocked by SELinux:
-//  1. Configured local IP (from Android ConnectivityManager via SetLocalIP)
-//  2. net.Interfaces()
-//  3. net.InterfaceAddrs()
-//  4. UDP routing probe (queries the kernel routing table without sending traffic)
 func findLANIPs() []net.IP {
 	var lanIPs []net.IP
 	seen := make(map[string]bool)
@@ -932,14 +956,12 @@ func findLANIPs() []net.IP {
 		}
 	}
 
-	// 1. Android ConnectivityManager / user-configured IP
 	if cfg := GetConfiguredLocalIP(); cfg != "" {
 		if parsed := net.ParseIP(cfg); parsed != nil {
 			addIP(parsed, "SetLocalIP")
 		}
 	}
 
-	// 2. net.Interfaces()
 	if ifaces, err := net.Interfaces(); err == nil {
 		for _, ifi := range ifaces {
 			if (ifi.Flags&net.FlagUp) == 0 || (ifi.Flags&net.FlagLoopback) != 0 {
@@ -964,7 +986,6 @@ func findLANIPs() []net.IP {
 		log.Printf("[LANMESH] net.Interfaces() error: %v", err)
 	}
 
-	// 3. net.InterfaceAddrs()
 	if ifAddrs, err := net.InterfaceAddrs(); err == nil {
 		for _, a := range ifAddrs {
 			if ipnet, ok := a.(*net.IPNet); ok {
@@ -973,12 +994,10 @@ func findLANIPs() []net.IP {
 		}
 	}
 
-	// 4. UDP routing probe: connect() on a UDP socket asks the kernel routing
-	// table which local IP would route outbound, without sending any packets.
 	probeTargets := []string{
-		"224.0.0.1:9000",       // Multicast subnet
-		"255.255.255.255:9000", // Broadcast
-		"1.1.1.1:80",           // Gateway
+		"224.0.0.1:9000",
+		"255.255.255.255:9000",
+		"1.1.1.1:80",
 	}
 	for _, target := range probeTargets {
 		conn, err := net.DialTimeout("udp4", target, 500*time.Millisecond)
@@ -993,10 +1012,6 @@ func findLANIPs() []net.IP {
 	return lanIPs
 }
 
-// filterAndExpandAddrs replaces 0.0.0.0 listen addresses with real, dialable local
-// LAN interface IPv4 addresses so that other nodes on the Wi-Fi/hotspot network can
-// connect to this node. It strictly excludes loopback (127.0.0.1) and unroutable addresses.
-// It will NEVER return loopback addresses or fall back to 0.0.0.0.
 func filterAndExpandAddrs(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
 	lanIPs := findLANIPs()
 
@@ -1005,7 +1020,6 @@ func filterAndExpandAddrs(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
 
 	for _, a := range addrs {
 		str := a.String()
-		// Never advertise loopback
 		if strings.Contains(str, "/ip4/127.0.0.1/") || strings.Contains(str, "/ip6/::1/") {
 			log.Printf("[LANMESH] filterAndExpandAddrs: skipped loopback addr: %s", str)
 			continue
