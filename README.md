@@ -353,7 +353,183 @@ You can also turn any standard `lanmesh.exe` binary into an admin station at run
 
 ---
 
-### 4. Running Multi-Node Clusters Locally
+### 4. Linux Standalone Package (`.AppImage`)
+
+To distribute LanMesh as a portable, single-file `.AppImage` on Linux (x86_64) that runs on any distribution without installation:
+
+#### Option A: Quick Packaging via `appimagetool` (on Linux / WSL)
+```bash
+# 1. Compile the Linux 64-bit binary
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o lanmesh-linux-amd64 ./cmd/desktop
+
+# 2. Construct the standard AppDir directory structure
+mkdir -p LanMesh.AppDir/usr/bin
+cp lanmesh-linux-amd64 LanMesh.AppDir/usr/bin/lanmesh
+
+# 3. Create the desktop integration file (LanMesh.AppDir/lanmesh.desktop)
+cat << 'EOF' > LanMesh.AppDir/lanmesh.desktop
+[Desktop Entry]
+Name=LanMesh
+Comment=Decentralized Offline Mesh Communicator
+Exec=lanmesh
+Icon=lanmesh
+Terminal=false
+Type=Application
+Categories=Network;Chat;InstantMessaging;
+EOF
+
+# 4. Create the AppRun launcher (LanMesh.AppDir/AppRun)
+cat << 'EOF' > LanMesh.AppDir/AppRun
+#!/bin/sh
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+export PATH="${HERE}/usr/bin:${PATH}"
+exec "${HERE}/usr/bin/lanmesh" "$@"
+EOF
+chmod +x LanMesh.AppDir/AppRun
+
+# 5. Place an application icon (PNG/SVG)
+cp core/static/favicon.ico LanMesh.AppDir/lanmesh.png 2>/dev/null || touch LanMesh.AppDir/lanmesh.png
+
+# 6. Build the standalone .AppImage binary
+wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+chmod +x appimagetool
+ARCH=x86_64 ./appimagetool LanMesh.AppDir LanMesh-x86_64.AppImage
+```
+
+---
+
+### 5. macOS Disk Image (`.dmg` for macOS)
+
+On macOS, LanMesh is bundled into a standard `LanMesh.app` bundle and converted into an installable `.dmg` disk image.
+
+#### Method A: Packaging on Native macOS (via `hdiutil` / `create-dmg`)
+```bash
+# 1. Compile the macOS binary (Universal or Apple Silicon ARM64)
+# Apple Silicon (M1/M2/M3/M4):
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o lanmesh-darwin-arm64 ./cmd/desktop
+# Intel (x86_64):
+CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o lanmesh-darwin-amd64 ./cmd/desktop
+
+# (Optional) Combine into Universal Binary:
+# lipo -create -output lanmesh lanmesh-darwin-arm64 lanmesh-darwin-amd64
+
+# 2. Build the macOS .app Bundle structure
+mkdir -p LanMesh.app/Contents/MacOS
+mkdir -p LanMesh.app/Contents/Resources
+cp lanmesh-darwin-arm64 LanMesh.app/Contents/MacOS/lanmesh
+chmod +x LanMesh.app/Contents/MacOS/lanmesh
+
+# 3. Generate Info.plist
+cat << 'EOF' > LanMesh.app/Contents/Info.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>lanmesh</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.lanmesh.desktop</string>
+    <key>CFBundleName</key>
+    <string>LanMesh</string>
+    <key>CFBundleVersion</key>
+    <string>1.0.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+</dict>
+</plist>
+EOF
+
+# 4. Create the final .dmg disk image using macOS native hdiutil
+mkdir -p dmg_root
+cp -R LanMesh.app dmg_root/
+ln -s /Applications dmg_root/Applications
+hdiutil create -volname "LanMesh" -srcfolder dmg_root -ov -format UDZO LanMesh-macOS.dmg
+rm -rf dmg_root
+
+# Alternatively, using create-dmg (brew install create-dmg) for custom styling:
+# create-dmg --volname "LanMesh" --window-size 600 400 --app-drop-link 450 185 LanMesh-macOS.dmg LanMesh.app
+```
+
+#### Method B: Building macOS Packages Directly on Windows (PowerShell)
+
+You can cross-compile the macOS executable and create ready-to-run macOS releases from Windows without owning a Mac:
+
+```powershell
+# 1. Cross-compile the Apple Silicon binary on Windows:
+$env:GOOS = "darwin"
+$env:GOARCH = "arm64"
+$env:CGO_ENABLED = "0"
+go build -ldflags="-s -w" -o lanmesh ./cmd/desktop
+
+# 2. Construct the LanMesh.app bundle directory structure:
+New-Item -ItemType Directory -Force -Path "LanMesh.app\Contents\MacOS"
+New-Item -ItemType Directory -Force -Path "LanMesh.app\Contents\Resources"
+Move-Item -Force "lanmesh" "LanMesh.app\Contents\MacOS\lanmesh"
+
+# 3. Generate Info.plist:
+@"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>lanmesh</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.lanmesh.desktop</string>
+    <key>CFBundleName</key>
+    <string>LanMesh</string>
+    <key>CFBundleVersion</key>
+    <string>1.0.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+</dict>
+</plist>
+"@ | Out-File -FilePath "LanMesh.app\Contents\Info.plist" -Encoding utf8
+
+# 4. Package for macOS distribution:
+# Option 4a: Pure Windows ZIP Archive (Native macOS support — double-click automatically extracts LanMesh.app):
+Compress-Archive -Path "LanMesh.app" -DestinationPath "LanMesh-macOS.zip" -Force
+
+# Option 4b: Build an actual .dmg on Windows using Python dmgbuild:
+# pip install dmgbuild
+# dmgbuild -s settings.py "LanMesh" LanMesh.dmg
+```
+
+#### Method C: Automated Free macOS DMG Pipeline (GitHub Actions)
+For production `.dmg` images with Gatekeeper notarization, use a free GitHub Actions `macos-latest` runner (`.github/workflows/build-mac.yml`):
+```yaml
+name: Build macOS DMG
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Build and Package DMG
+        run: |
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o lanmesh ./cmd/desktop
+          mkdir -p LanMesh.app/Contents/MacOS
+          mv lanmesh LanMesh.app/Contents/MacOS/
+          mkdir -p dmg_root
+          cp -R LanMesh.app dmg_root/
+          ln -s /Applications dmg_root/Applications
+          hdiutil create -volname "LanMesh" -srcfolder dmg_root -ov -format UDZO LanMesh.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LanMesh-macOS-DMG
+          path: LanMesh.dmg
+```
+
+> **Note on iOS:** Apple iOS does not use `.dmg` disk images (DMG is exclusively for macOS desktop distribution). iOS applications are packaged as `.ipa` archives or built through Xcode using a Gomobile framework (`gomobile bind -target=ios ./mobile`).
+
+---
+
+### 6. Running Multi-Node Clusters Locally
 
 You can run multiple isolated peers and an admin station on a single machine:
 
@@ -372,17 +548,66 @@ You can run multiple isolated peers and an admin station on a single machine:
 
 ## Android Native Mobile Integration
 
-The Android client runs a Flutter UI with a background Foreground Service managing the embedded Go engine:
+The Android client runs a native Android application (`android-app`) with a background Foreground Service managing the embedded Go engine:
 
 * **Foreground Service:** Runs with a persistent low-priority status notification, preventing Android OS task-killer eviction.
 * **`WifiManager.MulticastLock`:** Unblocks UDP sockets so mDNS multicast discovery packets are not dropped by Android Wi-Fi drivers.
 * **`PowerManager.PARTIAL_WAKE_LOCK`:** Prevents the CPU from entering deep sleep, allowing the phone to route mesh packets while in a user's pocket.
 * **UDP Broadcast Beacon Support:** Seamlessly discovers peers even on Android 11+ (API 30+) devices where SELinux sandboxes block mDNS netlink route inspection.
 
-### Cross-Compiling the Android ARM64 Daemon
+---
+
+### Android Release APK Build Pipeline
+
+Building the standalone release APK (`lanmesh-release.apk`) is performed in two steps: compiling the Go mobile AAR library via `gomobile bind`, then assembling the release APK using Gradle.
+
+#### Step 1: Build `mobile.aar` (Gomobile Bind)
+Auto-detect Java, Android SDK, and latest installed NDK from standard system paths, then compile the native Android archive:
 
 ```powershell
-# Windows (PowerShell)
+# Automatically resolve Java Home (from Android Studio JBR or standard JDK)
+if (Test-Path "C:\Program Files\Android\Android Studio\jbr") {
+    $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+}
+if ($env:JAVA_HOME) { $env:PATH = "$env:JAVA_HOME\bin;$env:PATH" }
+
+# Automatically resolve Android SDK
+if (-not $env:ANDROID_HOME) {
+    $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+}
+
+# Automatically pick the latest installed NDK version
+if (-not $env:ANDROID_NDK_HOME) {
+    $latestNdk = Get-ChildItem -Path "$env:ANDROID_HOME\ndk" -Directory -ErrorAction SilentlyContinue |
+        Sort-Object { [version]($_.Name -replace '[^0-9.]') } -Descending |
+        Select-Object -First 1
+    if ($latestNdk) { $env:ANDROID_NDK_HOME = $latestNdk.FullName }
+}
+
+# Compile the Android ARM64 Go AAR library
+gomobile bind -target=android/arm64 -androidapi 21 -ldflags="-s -w -checklinkname=0" -o android-app\app\libs\mobile.aar ./mobile
+```
+
+#### Step 2: Build and Package the APK with Gradle
+Build the optimized release APK and copy it to the root project directory:
+
+```powershell
+# Navigate into the android-app directory and assemble release APK
+Set-Location "android-app"
+.\gradlew.bat assembleRelease --no-daemon
+
+# Return to root and copy the finished release APK
+Set-Location ".."
+Copy-Item "android-app\app\build\outputs\apk\release\app-release.apk" "lanmesh-release.apk" -Force
+```
+
+---
+
+### Alternative: Standalone Subprocess Binary (Daemon)
+
+If running the Go engine as an extracted standalone ELF executable inside Android's native binary folder:
+
+```powershell
 $env:GOOS = "android"
 $env:GOARCH = "arm64"
 $env:CGO_ENABLED = "0"
@@ -396,11 +621,6 @@ New-Item -ItemType Directory -Force -Path "android-app\app\src\main\assets"
 Copy-Item "lanmesh-android" "android-app\app\src\main\jniLibs\arm64-v8a\liblanmesh.so" -Force
 Copy-Item "lanmesh-android" "android-app\app\src\main\assets\lanmesh-android" -Force
 ```
-
-> **Note on gomobile integration:** The native Android application in `android-app/` connects to the Go engine via the `mobile.aar` library (`android-app/app/libs/mobile.aar`), which calls `mobile.Start(port, dataDir)` in [`LanMeshService.kt`](file:///android-app/app/src/main/java/com/example/lanmesh/LanMeshService.kt). To rebuild `mobile.aar` directly with Gomobile:
-> ```powershell
-> gomobile bind -target=android/arm64 -o android-app\app\libs\mobile.aar ./mobile
-> ```
 
 ---
 
